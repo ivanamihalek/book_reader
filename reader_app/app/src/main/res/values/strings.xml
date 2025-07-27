@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Book Reader</string>
+    <string name="exit">Exit</string>
+    <string name="database_error_title">Database Error</string>
+    <string name="loading">Loading…</string>
+    <string name="no_books_available">No books available</string>
+    <string name="my_books">My Books</string>
+    <string name="back">Back</string>
+    <string name="by_author">by %s</string>
+    <string name="last_played">Last played: %s</string>
+</resources>
