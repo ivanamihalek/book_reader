@@ -129,6 +129,9 @@ def sample_docx_lines(input_file, output_file, sample_rate=0.1, seed=None):
 
 
 def main():
+    print("this is not working")
+    exit()
+
     parser = argparse.ArgumentParser(description='Sample lines from a DOCX document while preserving metadata')
     parser.add_argument('input_file', help='Input DOCX file path')
     parser.add_argument('output_file', help='Output DOCX file path')
