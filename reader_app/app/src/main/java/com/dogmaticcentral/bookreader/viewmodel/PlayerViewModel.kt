@@ -2,21 +2,16 @@ package com.dogmaticcentral.bookreader.viewmodel
 
 import android.app.Application
 import android.content.Context
-import android.content.SharedPreferences
 import android.net.Uri
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dogmaticcentral.bookreader.data.BookRepository
 import com.dogmaticcentral.bookreader.data.media.MediaPlayerHolder
-import kotlinx.coroutines.DisposableHandle
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicReference
 
 enum class PlaybackState {
     IDLE, PLAYING, PAUSED, COMPLETED
@@ -159,11 +154,11 @@ class PlayerViewModel(
         }
     }
 
-    fun savePlaybackState(position: Long) {
+    fun savePlaybackState(position: Long, finishedPlaying: Boolean = false) {
         val timeStopped = System.currentTimeMillis()
         currentChapterId?.let { chapterId ->
             viewModelScope.launch {
-                repository.updateLastPlayedPositionAndTime(chapterId, position, timeStopped)
+                repository.updatePlayData(chapterId, position, timeStopped, finishedPlaying)
             }
         }
     }

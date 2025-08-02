@@ -1,0 +1,36 @@
+[
+  {
+    "name": "Amis, Kingsley",
+    "books": [
+      "Stari vragovi"
+    ],
+    "birth_year": null,
+    "death_year": null,
+    "country": null,
+    "genres": []
+  },
+  {
+    "name": "Amis, Martin",
+    "books": [
+      "Noćni vlak"
+    ],
+    "birth_year": null,
+    "death_year": null,
+    "country": null,
+    "genres": []
+  },
+  {
+    "name": "Ammaniti, Niccolo",
+    "books": [
+      "Anna",
+      "Ja se ne bojim",
+      "Kako Bog zapovijeda",
+      "Nek zabava počne",
+      "Pokupit ću te i odvesti"
+    ],
+    "birth_year": null,
+    "death_year": null,
+    "country": null,
+    "genres": []
+  }
+]

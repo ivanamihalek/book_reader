@@ -73,8 +73,8 @@ interface ChapterDao {
     @Query("UPDATE chapters SET lastPlayedPosition = :position WHERE id = :chapterId")
     suspend fun updateLastPlayedPosition(chapterId: Int, position: Long)
 
-    @Query("UPDATE chapters SET lastPlayedPosition = :position, lastPlayedTimestamp = :timeStopped WHERE id = :chapterId")
-    suspend fun updateLastPlayedPositionAndTime(chapterId: Int, position: Long, timeStopped: Long)
+    @Query("UPDATE chapters SET lastPlayedPosition = :position, lastPlayedTimestamp = :timeStopped, finishedPlaying = :finishedPlaying WHERE id = :chapterId")
+    suspend fun updatePlayData(chapterId: Int, position: Long, timeStopped: Long, finishedPlaying: Boolean)
 
     @Delete
     suspend fun deleteChapter(chapter: Chapter)
@@ -184,4 +184,17 @@ interface ChapterDao {
         WHERE bookId = (SELECT bookId FROM chapters WHERE id = :chapterId)
     """)
     suspend fun getTotalChaptersInBook(chapterId: Int): Int
+
+     /**
+     * Gets the last chapter in the book given bookId
+     */
+     @Query("SELECT * FROM chapters WHERE bookId = :bookId ORDER BY id DESC LIMIT 1")
+     suspend fun getLastChapterOfBook(bookId: Int): Chapter?
+
+     /**
+     * Checks if a chapter is finished playing
+     */
+     @Query("SELECT finishedPlaying FROM chapters WHERE id = :chapterId")
+     suspend fun chapterFinishedPlaying(chapterId: Int): Boolean
+
 }

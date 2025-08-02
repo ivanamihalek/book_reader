@@ -2,12 +2,11 @@ package com.dogmaticcentral.bookreader.data
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
+import android.media.MediaMetadataRetriever
 import com.dogmaticcentral.bookreader.data.database.*
 import com.dogmaticcentral.bookreader.data.media.getAudioContentUriFromFilePath
 import com.dogmaticcentral.bookreader.data.media.saveMp3ToMediaStore
 import kotlinx.coroutines.flow.Flow
-import java.io.File
 
 class BookRepository(
     private val bookDao: BookDao,
@@ -47,6 +46,11 @@ class BookRepository(
     suspend fun isLastChapter(chapterId: Int): Boolean =
         chapterDao.isLastChapter(chapterId)
 
+    suspend fun chapterFinishedPlaying(chapterId: Int): Boolean =
+        chapterDao.chapterFinishedPlaying(chapterId)
+
+    suspend fun getLastChapterOfBook(bookId: Int): Chapter? =
+        chapterDao.getLastChapterOfBook(bookId)
 
     data class ChapterNavigationInfo(
         val currentChapterId: Int,
@@ -77,12 +81,13 @@ class BookRepository(
     suspend fun updateLastPlayedPosition(chapterId: Int, position: Long) =
         chapterDao.updateLastPlayedPosition(chapterId, position)
 
-    suspend fun updateLastPlayedPositionAndTime(
+    suspend fun updatePlayData(
         chapterId: Int,
         position: Long,
-        timeStopped: Long
+        timeStopped: Long,
+        finishedPlaying: Boolean
     ) {
-        chapterDao.updateLastPlayedPositionAndTime(chapterId, position, timeStopped)
+        chapterDao.updatePlayData(chapterId, position, timeStopped, finishedPlaying)
     }
 
     // Get the most recently played book based on lastPlayedTimestamp in chapters
@@ -132,4 +137,18 @@ suspend fun getAudioContentUri(
         uri = saveMp3ToMediaStore(context, filePath)
     }
     return uri
+}
+
+fun getAudioDuration(context: Context, audioUri: Uri): Long {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, audioUri)
+        val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+        durationStr?.toLongOrNull() ?: 0L // Duration in milliseconds
+    } catch (e: Exception) {
+        e.printStackTrace()
+        0L // Return 0 if failed
+    } finally {
+        retriever.release()
+    }
 }

@@ -1,57 +1,67 @@
 #! /usr/bin/env python
 from docx import Document
+import re
 import json
-from collections import defaultdict
+from unicodedata import normalize
 
-def main():
+def parse_authors_books_from_docx(docx_path):
 
-    # Load the document
-    doc_path = "sources/POPIS_ZVUČNIH_KNJIGA.docx"
-    doc = Document(doc_path)
+    doc = Document(docx_path)
+    authors = []
+    current_author = None
+    current_books = []
 
-    # Initialize structures
-    books_by_author = defaultdict(list)
-    section_counts = defaultdict(int)
-    current_section = None
-    total_books = 0
+    # State tracking
+    in_book_list = False
+    book_pattern = re.compile(r'^\s*(.+?)\s*[-–—]\s*(.+)$')
 
-    # Parse the document
     for para in doc.paragraphs:
-        text = para.text.strip()
+        # Normalize and clean the text
+        line = normalize('NFKC', para.text.strip())
+        line = re.sub(r'\s+', ' ', line)
 
-        # Detect section headers
-        if text.isupper() and len(text.split()) < 5:
-            current_section = text
+        # Detect when we enter the book list section
+        if line == "LIJEPA KNJIŽEVNOST" or line.startswith("POGLAVLJA"):
+            in_book_list = True
             continue
 
-        # Match lines of the form "Author - Book"
-        if " - " in text and current_section:
-            parts = text.split(" - ", 1)
-            author = parts[0].strip()
-            book = parts[1].strip()
+        # Skip everything until we're in the book list section
+        if not in_book_list:
+            continue
 
-            books_by_author[author].append({
-                "title": book,
-                "poglavlje": current_section
-            })
-            section_counts[current_section] += 1
-            total_books += 1
+        # Skip section headers (single letters) and empty lines
+        if len(line) <= 1 or not line:
+            continue
 
-    # Save the grouped books
-    books_output_path = "sources/books_grouped_by_author.json"
-    with open(books_output_path, "w", encoding="utf-8") as f:
-        json.dump(books_by_author, f, ensure_ascii=False, indent=2)
+        # Try to match author - book pattern
+        match = book_pattern.match(line)
+        if match:
+            author = match.group(1).strip()
+            book = match.group(2).strip()
 
-    # Prepare and save the section summary
-    summary = {
-        "books_per_section": dict(section_counts),
-        "total_books": total_books
-    }
+            # Handle author change
+            if current_author and author != current_author:
+                authors.append({"name": current_author, "books": current_books})
+                current_books = []
 
-    summary_output_path = "sources/book_section_summary.json"
-    with open(summary_output_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
+            current_author = author
+            current_books.append(book)
 
+    # Add the last author
+    if current_author and current_books:
+        authors.append({"name": current_author, "books": current_books})
+
+    return {"authors": authors}
+
+def main():
+    input_docx = "sources/POPIS_ZVUČNIH_KNJIGA.docx"   # Path to your file
+    output_json = "authors_books.json"
+
+    data = parse_authors_books_from_docx(input_docx)
+    with open(output_json, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"Parsed {len(data['authors'])} authors. Saved to {output_json}.")
 
 
 #######################

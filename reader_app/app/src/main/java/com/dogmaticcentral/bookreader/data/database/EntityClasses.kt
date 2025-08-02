@@ -44,5 +44,9 @@ data class Chapter(
     val lastPlayedPosition: Int = 0,
 
     @ColumnInfo(name = "lastPlayedTimestamp", defaultValue = "0")
-    val lastPlayedTimestamp: Long = 0L
+    val lastPlayedTimestamp: Long = 0L,
+
+    @ColumnInfo(name = "finishedPlaying", defaultValue = "0")
+    val finishedPlaying: Boolean = false
+
 )
