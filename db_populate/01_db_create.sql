@@ -17,6 +17,7 @@ CREATE TABLE  IF NOT EXISTS  chapters (
     fileName TEXT NOT NULL,
     lastPlayedPosition INTEGER NOT NULL DEFAULT 0,
     lastPlayedTimestamp INTEGER NOT NULL DEFAULT 0,
+    finishedPlaying INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY(bookId) REFERENCES books(id) ON DELETE CASCADE
 );
 CREATE INDEX "chapter_bookId" ON "chapters" ("bookId");

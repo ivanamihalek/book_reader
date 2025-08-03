@@ -114,8 +114,8 @@ fun PlayerScreen(
                             playerViewModel.togglePlayPause()
                         }
                     },
-                    onRewind = { playerViewModel.seekRelative(-10000) },
-                    onForward = { playerViewModel.seekRelative(10000) }
+                    onRewind = { playerViewModel.seekRelative(-120000) },
+                    onForward = { playerViewModel.seekRelative(120000) }
                 )
             }
         }
