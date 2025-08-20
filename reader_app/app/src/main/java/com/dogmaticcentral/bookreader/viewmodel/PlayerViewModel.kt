@@ -82,7 +82,7 @@ class PlayerViewModel(
                 _playbackState.value = PlaybackState.COMPLETED
                 // Reset position and update time on completion
                 savePlaybackState(_currentPosition.value.toLong())
-                 checkShouldNavigateToNextChapter()
+                checkShouldNavigateToNextChapter()
             },
 
         )
