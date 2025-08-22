@@ -41,7 +41,7 @@ fun HomeScreen(
         ) {
             items(uiState.books) { book ->
                 LargeButton(
-                    text = book.title,
+                    text = "${book.author.split(" ").last()}: ${book.title}",
                     onClick = { navController.navigate("chapters/${book.id}") },
                     modifier = Modifier.fillMaxWidth()
                         .then(

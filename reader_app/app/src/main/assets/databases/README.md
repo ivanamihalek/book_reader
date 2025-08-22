@@ -9,8 +9,8 @@ to your desktop.
 Below are the three most common ways to do it on a debug build (no root required).
 
 ──────────────────────────────────
-1. Android Studio Device Explorer (easiest)
-   ──────────────────────────────────
+## 1. Android Studio Device Explorer (easiest)
+──────────────────────────────────
 1. Make sure the app is NOT running (Run ▸ Stop), otherwise the WAL file may still be open.
 2. Android Studio ▸ View ▸ Tool Windows ▸ Device Explorer (called “Device File Explorer” in older versions).
 3. Pick the connected phone/emulator.
@@ -23,17 +23,18 @@ Below are the three most common ways to do it on a debug build (no root required
    The .db file is already in SQLite format—open it with any desktop SQLite client.
 
 ────────────────────────
-2. Pure adb / command line
-   ────────────────────────
+## 2. Pure adb / command line
+────────────────────────
    Stop the app first so nothing is writing to the DB:
 
    adb shell am force-stop your.package.name
 
 Then pull the files using run-as (works on any debuggable build):
 
+```bash
 # Copy .db to stdout and redirect to a local file
 adb exec-out "run-as your.package.name cat databases/yourDbName.db" > ~/Desktop/yourDbName.db
-
+````
 Do the same for the -wal and -shm files if they exist:
 
 adb exec-out "run-as your.package.name cat databases/yourDbName.db-wal" > ~/Desktop/yourDbName.db-wal
@@ -48,8 +49,8 @@ adb shell "run-as your.package.name sqlite3 databases/yourDbName.db .dump" > ~/D
 Import on desktop with: sqlite3 new.db < yourDb.sql
 
 ──────────────────────────────
-3. Programmatic export from inside the app
-   ──────────────────────────────
+## 3. Programmatic export from inside the app 
+──────────────────────────────
    If you need an end-user feature (so adb isn’t available), copy the file to an external location your app can access:
 
 ```
