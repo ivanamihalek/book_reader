@@ -7,6 +7,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dogmaticcentral.bookreader.data.BookRepository
 import com.dogmaticcentral.bookreader.data.media.MediaPlayerHolder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +19,7 @@ import kotlinx.coroutines.launch
 enum class PlaybackState {
     IDLE, PLAYING, PAUSED, COMPLETED
 }
+
 class PlayerViewModel(
     application: Application,
     private val repository: BookRepository
@@ -31,14 +35,17 @@ class PlayerViewModel(
 
     private var currentChapterId: Int? = null
 
-    private val _hasReachedEnd = MutableStateFlow(false)
-
-
     private val _navigationInfo = MutableStateFlow<BookRepository.ChapterNavigationInfo?>(null)
     val navigationInfo: StateFlow<BookRepository.ChapterNavigationInfo?> = _navigationInfo.asStateFlow()
 
     private val _shouldNavigateToNextChapter = MutableStateFlow(false)
     val shouldNavigateToNextChapter: StateFlow<Boolean> = _shouldNavigateToNextChapter.asStateFlow()
+
+    // Independent scope so DB writes aren’t killed with ViewModel
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Track completion
+    private var chapterFinished = false
 
     fun initialize(context: Context, chapterId: Int) {
         if (!::mediaPlayerHolder.isInitialized) {
@@ -53,14 +60,12 @@ class PlayerViewModel(
         viewModelScope.launch {
             _navigationInfo.value = repository.getChapterNavigationInfo(chapterId)
         }
-
     }
 
     private fun restoreLastPlayedPosition() {
         currentChapterId?.let { chapterId ->
             viewModelScope.launch {
                 val lastPosition = repository.getChapterById(chapterId)?.lastPlayedPosition ?: 0L
-                // Start 10 seconds earlier, but not less than zero
                 val startPosition = (lastPosition.toLong() - 10000L).coerceAtLeast(0L).toInt()
                 _currentPosition.value = startPosition
                 if (::mediaPlayerHolder.isInitialized) {
@@ -80,12 +85,11 @@ class PlayerViewModel(
             },
             onCompletion = {
                 _playbackState.value = PlaybackState.COMPLETED
-                // Reset position and update time on completion
-                savePlaybackState(_currentPosition.value.toLong(),
-                    finishedPlaying = true)
+                chapterFinished = true
+                // Use independent scope so it isn’t cancelled on ViewModel clear
+                savePlaybackState(_currentPosition.value.toLong(), finishedPlaying = true)
                 checkShouldNavigateToNextChapter()
-            },
-
+            }
         )
     }
 
@@ -97,10 +101,7 @@ class PlayerViewModel(
         _currentPosition.value = newPosition
     }
 
-
-
     private fun checkShouldNavigateToNextChapter() {
-
         viewModelScope.launch {
             _navigationInfo.value?.let { info ->
                 if (!info.isLastChapter) {
@@ -130,7 +131,7 @@ class PlayerViewModel(
                 _playbackState.value = PlaybackState.PLAYING
                 startProgressUpdates()
             }
-            else -> { /* No-op for IDLE or COMPLETED */ }
+            else -> {}
         }
     }
 
@@ -138,7 +139,6 @@ class PlayerViewModel(
         mediaPlayerHolder.stop()
         _playbackState.value = PlaybackState.IDLE
         savePlaybackState(_currentPosition.value.toLong())
-       // _currentPosition.value = 0
     }
 
     fun seekTo(position: Int) {
@@ -155,18 +155,16 @@ class PlayerViewModel(
         }
     }
 
-    fun savePlaybackState(position: Long, finishedPlaying: Boolean = false) {
-        val timeStopped = System.currentTimeMillis()
+     fun savePlaybackState(position: Long, finishedPlaying: Boolean = false) {
         currentChapterId?.let { chapterId ->
-            viewModelScope.launch {
-                repository.updatePlayData(chapterId, position, timeStopped, finishedPlaying)
+            ioScope.launch {
+                repository.updatePlayData(chapterId, position, System.currentTimeMillis(), finishedPlaying)
             }
         }
     }
 
     override fun onCleared() {
-        savePlaybackState(_currentPosition.value.toLong(),
-            finishedPlaying = (playbackState.value == PlaybackState.COMPLETED))
+        savePlaybackState(_currentPosition.value.toLong(), finishedPlaying = chapterFinished)
         mediaPlayerHolder.release()
         super.onCleared()
     }
