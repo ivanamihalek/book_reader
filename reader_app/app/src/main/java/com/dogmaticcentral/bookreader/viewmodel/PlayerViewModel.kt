@@ -81,7 +81,8 @@ class PlayerViewModel(
             onCompletion = {
                 _playbackState.value = PlaybackState.COMPLETED
                 // Reset position and update time on completion
-                savePlaybackState(_currentPosition.value.toLong())
+                savePlaybackState(_currentPosition.value.toLong(),
+                    finishedPlaying = true)
                 checkShouldNavigateToNextChapter()
             },
 
@@ -164,7 +165,8 @@ class PlayerViewModel(
     }
 
     override fun onCleared() {
-        savePlaybackState(_currentPosition.value.toLong())
+        savePlaybackState(_currentPosition.value.toLong(),
+            finishedPlaying = (playbackState.value == PlaybackState.COMPLETED))
         mediaPlayerHolder.release()
         super.onCleared()
     }

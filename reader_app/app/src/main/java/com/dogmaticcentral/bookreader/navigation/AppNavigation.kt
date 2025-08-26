@@ -15,6 +15,7 @@ import com.dogmaticcentral.bookreader.screens.PlayerScreen
 const val HOME_ROUTE = "home"
 const val CHAPTERS_ROUTE = "chapters/{bookId}"
 const val PLAYER_ROUTE = "player/{bookId}/{chapterId}"
+
 @Composable
 fun AppNavigation(navController: NavHostController) {
     NavHost(navController, startDestination = HOME_ROUTE) {

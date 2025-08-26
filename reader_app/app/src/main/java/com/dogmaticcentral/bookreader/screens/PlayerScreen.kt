@@ -49,13 +49,15 @@ fun PlayerScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                playerViewModel.savePlaybackState(playerViewModel.currentPosition.value.toLong(),
+                playerViewModel.savePlaybackState(
+                    playerViewModel.currentPosition.value.toLong(),
                     finishedPlaying = (playbackState == PlaybackState.COMPLETED))
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            playerViewModel.savePlaybackState(playerViewModel.currentPosition.value.toLong())
+            playerViewModel.savePlaybackState(playerViewModel.currentPosition.value.toLong(),
+                finishedPlaying = (playbackState == PlaybackState.COMPLETED))
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
@@ -77,7 +79,9 @@ fun PlayerScreen(
 
     fun navigateToChapter(nextChapterId: Int?) {
         nextChapterId?.let { nextId ->
-            playerViewModel.savePlaybackState(playerViewModel.currentPosition.value.toLong())
+            playerViewModel.savePlaybackState(
+                playerViewModel.currentPosition.value.toLong(),
+                finishedPlaying = (playbackState == PlaybackState.COMPLETED))
             playerViewModel.stop()
             isLoadingNext = true
             navController.popBackStack()
