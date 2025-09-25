@@ -4,13 +4,18 @@ import sys
 import argparse
 import re
 import hashlib
+from dbm import sqlite3
+
 from peewee import SqliteDatabase, Model, AutoField, CharField, IntegerField, ForeignKeyField, DatabaseError
 from pathlib import Path
 import subprocess
 from typing import List, Tuple
 
-# Setup Peewee database connection
-db = SqliteDatabase('bookreader.db')
+SQLITE_MAGIC = b"SQLite format 3\0"
+DB_NAME = 'bookreader.db'
+# Setup global  Peewee database connection - Peewee is so lame
+db = None
+
 
 
 class Book(Model):
@@ -34,6 +39,99 @@ class Chapter(Model):
     class Meta:
         database = db
         table_name = 'chapters'
+
+def is_valid_sqlite_db(path: str, verify_by_connection: bool = True) -> bool:
+    """
+    Check whether a file exists at *path* and is a valid SQLite3 database.
+
+    The function performs two checks (in order):
+
+    1. **Filesystem check** – the path must exist and point to a regular file.
+    2. **SQLite validation** – either:
+           * a quick header check using the SQLite file signature, or
+           * an actual connection attempt (default).
+
+    Parameters
+    ----------
+    path: str
+        Path to the file that should be inspected.
+    verify_by_connection: bool, optional (default=True)
+        If ``True`` the function will try to open the file with
+        ``sqlite3.connect()`` (using the ``uri`` parameter).  This is the most
+        reliable way to verify that the file can actually be used as a SQLite
+        database.  If ``False`` only the 16‑byte header check is performed,
+        which is faster but does not guarantee that the file can be opened
+        by SQLite (e.g., it could be corrupted beyond the header).
+
+    Returns
+    -------
+    bool
+        ``True`` if the file exists and appears to be a valid SQLite3
+        database, ``False`` otherwise.
+
+    Raises
+    ------
+    TypeError
+        If *path* is not a string.
+
+    Example
+    -------
+    >>> is_valid_sqlite_db('my_data.db')
+    True
+    >>> is_valid_sqlite_db('not_a_db.txt')
+    False
+    """
+    # ------------------------------------------------------------------
+    # 1️⃣  Basic type validation
+    # ------------------------------------------------------------------
+    if not isinstance(path, str):
+        raise TypeError("path must be a string")
+
+    # ------------------------------------------------------------------
+    # 2️⃣  Does the file exist and is it a regular file?
+    # ------------------------------------------------------------------
+    if not os.path.exists(path):
+        print(f"File '{path}' does not exist")
+        return False
+    if not os.path.isfile(path):
+        print(f"File '{path}' is not a regular file")
+        return False
+
+    # ------------------------------------------------------------------
+    # 3️⃣  Quick header validation (SQLite files start with this byte
+    #     sequence).  This is optional but cheap and catches many obvious
+    #     non‑SQLite files.
+    # ------------------------------------------------------------------
+
+    try:
+        with open(path, "rb") as f:
+            header = f.read(16)          # first 16 bytes
+    except OSError as e:
+        # Could not read the file (permissions, I/O error, etc.)
+        print(f"File '{path}' could not be opened: {e}")
+        return False
+
+    if header != SQLITE_MAGIC:
+        print(f"File '{path}' does not appear to be an SQLite3 database")
+        return False
+
+    # ------------------------------------------------------------------
+    # 4️⃣  Full validation via a connection attempt?
+    # ------------------------------------------------------------------
+    if verify_by_connection:
+        try:
+            # The `uri=True` flag allows us to open the file even if the
+            # path contains characters that would otherwise be interpreted
+            # as SQLite URI parameters.
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            # If we got here, SQLite accepted the file.  Close it promptly.
+            conn.close()
+        except (sqlite3.DatabaseError, OSError):
+            print(f"Connection with '{path}' could not be established")
+            return False
+
+    # If we reach this point, everything looks good.
+    return True
 
 
 def parse_directory_name(directory_path: str) -> Tuple[str, str]:
@@ -84,29 +182,36 @@ def validate_mp3_files(directory_path: str) -> List[str]:
     return mp3_files
 
 
-def check_adb_device() -> bool:
+def check_adb_device(device_name) -> bool:
     """Check if an ADB device is available."""
     try:
         result = subprocess.run(['adb', 'devices'], capture_output=True, text=True)
-        return len(result.stdout.strip().splitlines()) > 1
+        result_lines = result.stdout.splitlines()
+        if len(result_lines) == 0:
+            print("No ADB devices found")
+            return False
+        elif len([l for l in result_lines if device_name in l]) == 0:
+            print(f"Device '{device_name}' not found among ADB devices")
+            return False
     except Exception as e:
         print(f"Error checking ADB devices: {e}")
         return False
 
+    return True
 
-def create_device_directory(book_title: str, dry_run: bool = False) -> str:
+def create_device_directory(device_name: str,  book_title: str, dry_run: bool = False) -> str:
     """Create a directory on the device for the book."""
     book_dir_name = book_title.replace(' ', '')
     device_path = f"/sdcard/Audiobooks/BookReader/audio/{book_dir_name}"
     if not dry_run:
         try:
-            subprocess.run(['adb', 'shell', 'mkdir', '-p', device_path], check=True)
+            subprocess.run(['adb','-s', device_name,  'shell', 'mkdir', '-p', device_path], check=True)
             print(f"Created directory on device: {device_path}")
         except subprocess.CalledProcessError as e:
-            print(f"Failed to create directory on device: {e}")
-            sys.exit(1)
+            print(f"Failed to create directory on device {device_name}: {e}")
+            exit(1)
     else:
-        print(f"[Dry Run] Would create directory on device: {device_path}")
+        print(f"[Dry Run] Would create directory on device {device_name}: {device_path}")
     return device_path
 
 
@@ -123,10 +228,10 @@ def calculate_md5(file_path: str) -> str:
         return ""
 
 
-def get_device_md5(device_path: str) -> str:
+def get_device_md5(device_name: str,  device_path: str) -> str:
     """Get MD5 checksum of a file on the device using ADB."""
     try:
-        result = subprocess.run(['adb', 'shell', 'md5sum', device_path], capture_output=True, text=True)
+        result = subprocess.run(['adb', '-s', device_name, 'shell', 'md5sum', device_path], capture_output=True, text=True)
         if result.returncode == 0 and result.stdout:
             # md5sum output format: <hash>  <path>
             parts = result.stdout.strip().split()
@@ -193,7 +298,7 @@ def store_chapter_in_db(book: Book, title: str, file_name: str, dry_run: bool = 
         print(f"[Dry Run] Would store chapter in database: {title} ({file_name})")
 
 
-def copy_file_to_device(local_path: str, device_path: str, dry_run: bool = False) -> None:
+def copy_file_to_device(device_name: str, local_path: str, device_path: str, dry_run: bool = False) -> None:
     """Copy a file to the device using ADB if MD5 checksums differ."""
     if not dry_run:
         # Calculate local MD5
@@ -204,27 +309,30 @@ def copy_file_to_device(local_path: str, device_path: str, dry_run: bool = False
             # Get device MD5 (if file exists)
             device_md5 = get_device_md5(device_path)
             if device_md5 and local_md5 == device_md5:
-                print(f"Skipped upload: File {local_path} already exists on device with matching MD5 ({local_md5})")
+                print(f"Skipped upload: File {local_path} already exists on device {device_name} with matching MD5 ({local_md5})")
                 return
             elif device_md5:
                 print(f"MD5 mismatch: Local {local_md5} vs Device {device_md5}, uploading {local_path}")
             else:
-                print(f"No file or MD5 on device for {device_path}, uploading {local_path}")
+                print(f"No file or MD5 on device {device_name} for {device_path}, uploading {local_path}")
 
         # Proceed with upload if MD5 differs or file doesn't exist on device
         try:
-            subprocess.run(['adb', 'push', local_path, device_path], check=True)
+            subprocess.run(['adb', '-s', device_name, 'push', local_path, device_path], check=True)
             print(f"Copied file to device: {local_path} -> {device_path}")
         except subprocess.CalledProcessError as e:
-            print(f"Failed to copy file to device: {e}")
-            sys.exit(1)
+            print(f"Failed to copy file to device {device_name}: {e}")
+            exit(1)
     else:
         print(f"[Dry Run] Would copy file to device: {local_path} -> {device_path}")
 
 
 def main():
+
     parser = argparse.ArgumentParser(description="Process audiobook files and store them on an Android device.")
     parser.add_argument('directory', type=str, help="Path to the directory containing audiobook MP3 files")
+    helpstr = "The name of the device on which to operate. See 'shell> adb devices' is unsure."
+    parser.add_argument('device', type=str, help=helpstr)
     parser.add_argument('--dry-run', action='store_true', help="Simulate actions without executing them")
     args = parser.parse_args()
 
@@ -233,7 +341,19 @@ def main():
 
     if not os.path.isdir(directory_path):
         print(f"Error: Directory does not exist: {directory_path}")
-        sys.exit(1)
+        exit(1)
+
+    # Check for ADB device
+    if not check_adb_device(args.device):
+        print(f"Error: Device '{args.device}' not found. Exiting.")
+        exit(1)
+    print(f"Found device '{args.device}' running.")
+
+    if not is_valid_sqlite_db(DB_NAME, verify_by_connection= True):
+        print(f"Error: Something is wrong with the sqlite3 database '{DB_NAME}' (is this the full path?).  Exiting.")
+        exit(1)
+
+
 
     try:
         # Parse book title and author from directory name
@@ -243,18 +363,16 @@ def main():
         mp3_files = validate_mp3_files(directory_path)
         if not mp3_files:
             print("Error: No valid MP3 files found in directory.")
-            sys.exit(1)
+            exit(1)
 
-        # Check for ADB device
-        if not check_adb_device():
-            print("Warning: No ADB device found. Exiting.")
-            sys.exit(1)
+        print(f"found {len(mp3_files)} MP3 files in directory: {directory_path}")
 
         # Create directory on device
         device_book_dir = create_device_directory(book_title, dry_run)
 
         # Connect to database and check tables
         print("Connecting to database...")
+        db = SqliteDatabase(DB_NAME)
         db.connect()
 
         # Only create tables if they don't exist, avoiding index creation if already present
@@ -294,7 +412,7 @@ def main():
 
     except Exception as e:
         print(f"Error: {e}")
-        sys.exit(1)
+        exit(1)
     finally:
         if not db.is_closed():
             db.close()
