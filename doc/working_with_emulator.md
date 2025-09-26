@@ -137,3 +137,29 @@ The emulator appears as a device (usually `emulator-5554`, `emulator-5556`, etc.
 
 The emulator maintains persistent storage just like a real Android device, so your app data, downloaded files, 
 and anything stored in the virtual SD card will remain between sessions.
+
+# Troubleshooting
+
+## "Failed to measure fs-verity"
+
+The error message "Failed to measure fs-verity, errno 1: [path to base.apk]" often relates to an issue 
+with Android's fs-verity (a form of verified boot or integrity checking) 
+or an interference with the app installation/verification process, 
+particularly when using features like Google Play Protect.
+
+The most frequently suggested and effective solution involves addressing a potential conflict with Google Play Protect on the emulator:
+
+1. Disable Google Play Protection Mechanism:
+
+   * On the Android emulator, go to Settings (didn't work for me) 
+   ![emulator settings](assets/emulator_settings.png)
+   * or open the Google Play Store app
+   ![emulator playstore](assets/emulator_playstore.png)
+   * Find the Google Play Protect settings.
+    ![emulator play protect](assets/emulator_play_protect.png)
+    ![play protect settings](assets/play_protect_setttings.png)
+   * Disable the "Scan apps with Play Protect" option.
+    ![play protect diasble](assets/play_protect_disable.png)
+2. Rerun Your Application:
+
+After disabling the scan, try running your Kotlin application on the emulator again.
