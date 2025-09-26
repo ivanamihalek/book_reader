@@ -1,20 +1,19 @@
 #! /usr/bin/env python3
-import os
-import sys
 import argparse
-import re
 import hashlib
-from dbm import sqlite3
-
-from peewee import SqliteDatabase, Model, AutoField, CharField, IntegerField, ForeignKeyField, DatabaseError
-from pathlib import Path
+import os
+import sqlite3
 import subprocess
 from typing import List, Tuple
 
+from peewee import SqliteDatabase, Model, AutoField, CharField, IntegerField, ForeignKeyField, DatabaseError, Proxy
+
 SQLITE_MAGIC = b"SQLite format 3\0"
 DB_NAME = 'bookreader.db'
-# Setup global  Peewee database connection - Peewee is so lame
-db = None
+# Setup global  Peewee database proxy - Peewee is so lame
+# I don't want to instantiate the db here before checking and
+# informing the user that something may be wrong
+global_db_proxy = Proxy()
 
 
 
@@ -24,7 +23,7 @@ class Book(Model):
     author = CharField()
 
     class Meta:
-        database = db
+        database = global_db_proxy
         table_name = 'books'
 
 
@@ -37,7 +36,7 @@ class Chapter(Model):
     lastPlayedTimestamp = IntegerField(default=0)
 
     class Meta:
-        database = db
+        database = global_db_proxy
         table_name = 'chapters'
 
 def is_valid_sqlite_db(path: str, verify_by_connection: bool = True) -> bool:
@@ -243,7 +242,7 @@ def get_device_md5(device_name: str,  device_path: str) -> str:
         return ""
 
 
-def table_exists(table_name: str) -> bool:
+def table_exists(db: SqliteDatabase, table_name: str) -> bool:
     """Check if a table exists in the database."""
     try:
         query = db.execute_sql("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
@@ -253,9 +252,12 @@ def table_exists(table_name: str) -> bool:
         return False
 
 
-def store_book_in_db(title: str, author: str, dry_run: bool = False) -> int:
+def store_book_in_db(db: SqliteDatabase, title: str, author: str, dry_run: bool = False) -> int:
     """Store book details in the database and return the book ID."""
-    if not dry_run:
+    if dry_run:
+        print(f"[Dry Run] Would store book in database: {title} by {author}")
+        return -1  # Dummy ID for dry run
+    else:
         try:
             with db.atomic():
                 book, created = Book.get_or_create(title=title, defaults={'author': author})
@@ -267,12 +269,9 @@ def store_book_in_db(title: str, author: str, dry_run: bool = False) -> int:
         except Exception as e:
             print(f"Error storing book in database: {e}")
             raise
-    else:
-        print(f"[Dry Run] Would store book in database: {title} by {author}")
-        return -1  # Dummy ID for dry run
 
 
-def store_chapter_in_db(book: Book, title: str, file_name: str, dry_run: bool = False) -> None:
+def store_chapter_in_db(db: SqliteDatabase, book: Book, title: str, file_name: str, dry_run: bool = False) -> None:
     """Store chapter details in the database."""
     if not dry_run:
         try:
@@ -307,7 +306,7 @@ def copy_file_to_device(device_name: str, local_path: str, device_path: str, dry
             print(f"Failed to calculate local MD5 for {local_path}, proceeding with upload.")
         else:
             # Get device MD5 (if file exists)
-            device_md5 = get_device_md5(device_path)
+            device_md5 = get_device_md5(device_name, device_path)
             if device_md5 and local_md5 == device_md5:
                 print(f"Skipped upload: File {local_path} already exists on device {device_name} with matching MD5 ({local_md5})")
                 return
@@ -343,18 +342,19 @@ def main():
         print(f"Error: Directory does not exist: {directory_path}")
         exit(1)
 
+    device_name = args.device
     # Check for ADB device
-    if not check_adb_device(args.device):
-        print(f"Error: Device '{args.device}' not found. Exiting.")
+    if not check_adb_device(device_name):
+        print(f"Error: Device '{device_name}' not found. Exiting.")
         exit(1)
-    print(f"Found device '{args.device}' running.")
+    print(f"Found device '{device_name}' running.")
 
     if not is_valid_sqlite_db(DB_NAME, verify_by_connection= True):
         print(f"Error: Something is wrong with the sqlite3 database '{DB_NAME}' (is this the full path?).  Exiting.")
         exit(1)
+    print(f"Database '{DB_NAME}' ok.")
 
-
-
+    db = None
     try:
         # Parse book title and author from directory name
         book_title, author_name = parse_directory_name(directory_path)
@@ -368,15 +368,17 @@ def main():
         print(f"found {len(mp3_files)} MP3 files in directory: {directory_path}")
 
         # Create directory on device
-        device_book_dir = create_device_directory(book_title, dry_run)
+        print(book_title)
+        device_book_dir = create_device_directory(device_name, book_title, dry_run)
 
         # Connect to database and check tables
         print("Connecting to database...")
         db = SqliteDatabase(DB_NAME)
+        global_db_proxy.initialize(db)
         db.connect()
 
         # Only create tables if they don't exist, avoiding index creation if already present
-        if not table_exists('books') or not table_exists('chapters'):
+        if not table_exists(db, 'books') or not table_exists(db, 'chapters'):
             print("One or more tables missing. Creating tables...")
             db.create_tables([Book, Chapter], safe=True)
             print("Database tables created.")
@@ -384,7 +386,7 @@ def main():
             print("Database tables already exist. Skipping table creation to avoid new index creation.")
 
         # Store book in database and get its ID
-        book_id = store_book_in_db(book_title, author_name, dry_run)
+        book_id = store_book_in_db(db, book_title, author_name, dry_run)
         book = Book.get(Book.id == book_id) if not dry_run and book_id != -1 else None
 
         # Process each MP3 file
@@ -394,11 +396,11 @@ def main():
             chapter_title = os.path.splitext(mp3_file)[0]
 
             # Copy file to device (with MD5 check)
-            copy_file_to_device(local_file_path, device_file_path, dry_run)
+            copy_file_to_device(device_name, local_file_path, device_file_path, dry_run)
 
             # Store chapter in database
             if book:
-                store_chapter_in_db(book, chapter_title, mp3_file, dry_run)
+                store_chapter_in_db(db, book, chapter_title, mp3_file, dry_run)
 
         # Verify database contents (for debugging)
         if not dry_run:
@@ -412,9 +414,9 @@ def main():
 
     except Exception as e:
         print(f"Error: {e}")
-        exit(1)
+
     finally:
-        if not db.is_closed():
+        if db is not None and not db.is_closed():
             db.close()
             print("Database connection closed.")
 
