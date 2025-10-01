@@ -40,7 +40,7 @@ def rename_audio_files(directory_path: str, dry_run: bool) -> None:
         raise ValueError(f"Path is not a directory: {directory_path}")
 
     # Pattern to match files: <something><digits>.mp3 (case insensitive)
-    pattern = re.compile(r'^(.+?)(\d+)\.mp3$', re.IGNORECASE)
+    pattern = re.compile(r'^(.*?)(\d+)\.mp3$', re.IGNORECASE)
 
     # Find all matching files and extract their integers
     matching_files: List[Tuple[str, int, str]] = []  # (filename, integer, full_path)
@@ -71,12 +71,14 @@ def rename_audio_files(directory_path: str, dry_run: bool) -> None:
 
         new_name =  f"{integer_part:0{max_digits}d}.mp3"
         # Skip if the name wouldn't change
-        if old_filename.lower() == new_name: continue
+        if old_filename == new_name:
+            print(f"The name '{old_filename}' is ok. Moving on.")
+            continue
 
         new_full_path = os.path.join(directory_path, new_name)
 
         if dry_run:
-            print(f"will rename {old_filename} {new_name}")
+            print(f"Will rename {old_filename} {new_name}")
         else:
             try:
                 # Check if target file already exists

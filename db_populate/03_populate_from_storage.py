@@ -330,7 +330,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Process audiobook files and store them on an Android device.")
     parser.add_argument('directory', type=str, help="Path to the directory containing audiobook MP3 files")
-    helpstr = "The name of the device on which to operate. See 'shell> adb devices' is unsure."
+    helpstr = "The name of the device on which to operate. See 'shell> adb devices' if unsure."
     parser.add_argument('device', type=str, help=helpstr)
     parser.add_argument('--dry-run', action='store_true', help="Simulate actions without executing them")
     args = parser.parse_args()
