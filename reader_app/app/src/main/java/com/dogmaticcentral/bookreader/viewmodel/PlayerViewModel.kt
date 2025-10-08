@@ -3,6 +3,7 @@ package com.dogmaticcentral.bookreader.viewmodel
 import android.app.Application
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dogmaticcentral.bookreader.data.BookRepository
@@ -48,17 +49,33 @@ class PlayerViewModel(
     private var chapterFinished = false
 
     fun initialize(context: Context, chapterId: Int) {
+        Log.d("PlayerViewModel", "initialize() called for chapter=$chapterId")
         if (!::mediaPlayerHolder.isInitialized) {
             mediaPlayerHolder = MediaPlayerHolder(context)
         }
+        Log.d("PlayerViewModel", "mediaPlayerHolder.isInitialized ${::mediaPlayerHolder.isInitialized}")
         currentChapterId = chapterId
+        Log.d("PlayerViewModel", "loading navigation info")
         loadNavigationInfo(chapterId)
+        Log.d("PlayerViewModel", "restoring Last Played Position")
         restoreLastPlayedPosition()
+        Log.d("PlayerViewModel", "initialie() done")
     }
 
     private fun loadNavigationInfo(chapterId: Int) {
         viewModelScope.launch {
             _navigationInfo.value = repository.getChapterNavigationInfo(chapterId)
+        }
+    }
+
+    private fun debugSeekTo(label: String, position: Int) {
+        Log.d("PlayerViewModel", ">>> SEEKTO[$label] pos=$position, " +
+            "mediaPlayerHolder.isInitialized=${::mediaPlayerHolder.isInitialized}")
+        try {
+            mediaPlayerHolder.seekTo(position)
+            Log.d("PlayerViewModel", "<<< SEEKTO[$label] completed successfully")
+        } catch (e: Exception) {
+            Log.e("PlayerViewModel", "!!! SEEKTO[$label] threw ${e.message}", e)
         }
     }
 
@@ -68,9 +85,6 @@ class PlayerViewModel(
                 val lastPosition = repository.getChapterById(chapterId)?.lastPlayedPosition ?: 0L
                 val startPosition = (lastPosition.toLong() - 10000L).coerceAtLeast(0L).toInt()
                 _currentPosition.value = startPosition
-                if (::mediaPlayerHolder.isInitialized) {
-                    mediaPlayerHolder.seekTo(startPosition)
-                }
             }
         }
     }
@@ -79,8 +93,11 @@ class PlayerViewModel(
         mediaPlayerHolder.playAudio(
             audioUri = audioUri,
             onPrepared = {
+                val restorePos = _currentPosition.value
+                Log.d("PlayerViewModel", "onPrepared → seeking to $restorePos")
+                mediaPlayerHolder.seekTo(restorePos)
+
                 _playbackState.value = PlaybackState.PLAYING
-                mediaPlayerHolder.seekTo(_currentPosition.value)
                 startProgressUpdates()
             },
             onCompletion = {

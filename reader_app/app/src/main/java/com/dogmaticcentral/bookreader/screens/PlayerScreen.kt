@@ -25,6 +25,7 @@ import com.dogmaticcentral.bookreader.viewmodel.PlaybackState
 import com.dogmaticcentral.bookreader.viewmodel.PlayerViewModel
 import com.dogmaticcentral.bookreader.viewmodel.PlayerViewModelFactory
 import kotlinx.coroutines.delay
+import android.util.Log
 
 @Composable
 fun PlayerScreen(
@@ -39,6 +40,8 @@ fun PlayerScreen(
         )
     )
 ) {
+
+    // Let's define the local context first
     val context = LocalContext.current
     val repository = LocalBookRepository.current
     val playbackState by playerViewModel.playbackState.collectAsState()
@@ -46,6 +49,8 @@ fun PlayerScreen(
     val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
     var isLoadingNext by remember { mutableStateOf(false) }
 
+    ///////////////////////////////////////////////////////////////
+    //  Lifecycle observer for saving playback state on pause/stop
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
@@ -62,21 +67,33 @@ fun PlayerScreen(
         }
     }
 
+    ///////////////////////////////////////////////////////////////
+    // Coroutine for loading audio when book or chapter changes
     LaunchedEffect(bookId, chapterId) {
+        Log.d("PlayerScreen", "LaunchedEffect triggered for book=$bookId, chapter=$chapterId")
         audioFileUri = getAudioContentUri(context, repository, bookId, chapterId)
+        Log.d("PlayerScreen", "Audio URI = $audioFileUri")
+
         if (audioFileUri == null) {
+            Log.d("PlayerScreen", "Audio file not found!")
             showFileNotFoundDialog(context, bookId, chapterId)
         } else {
+            Log.d("PlayerScreen", "Initializing playerViewModel...")
             playerViewModel.initialize(context, chapterId)
+            Log.d("PlayerScreen", "Calling playAudio() immediately? playImmediately=$playImmediately")
             if (playImmediately) {
                 playerViewModel.playAudio(audioFileUri!!)
             }
         }
     }
 
+    ///////////////////////////////////////////////////////////////
+    // Navigation state
     val shouldNavigate by playerViewModel.shouldNavigateToNextChapter.collectAsState()
-    val navigationInfo by playerViewModel.navigationInfo.collectAsState()
+    //val navigationInfo by playerViewModel.navigationInfo.collectAsState()
 
+    ///////////////////////////////////////////////////////////////
+    // FUnction wrapping the actins needed to navigate to the next chapter
     fun navigateToChapter(nextChapterId: Int?) {
         nextChapterId?.let { nextId ->
             playerViewModel.savePlaybackState(
@@ -91,7 +108,10 @@ fun PlayerScreen(
         }
     }
 
+    ///////////////////////////////////////////////////////////////
+    //  Lifecycle observer for tracking the changes in navigation state
     LaunchedEffect(shouldNavigate) {
+        Log.d("PlayerScreen", "LaunchedEffect triggered for shouldNavigate=$shouldNavigate")
         if (shouldNavigate) {
             playerViewModel.getNextChapterId()?.let { nextChapterId ->
                 playerViewModel.resetNavigationState()
@@ -100,6 +120,8 @@ fun PlayerScreen(
         }
     }
 
+    ///////////////////////////////////////////////////////////////
+    //  UI Layout
     ScreenLayout(
         navController = navController,
         showBackButton = true,
@@ -113,6 +135,7 @@ fun PlayerScreen(
                 PlaybackControls(
                     playbackState = playbackState,
                     onPlayPause = {
+                        Log.d("PlayerScreen", "onPlayPause playbackState=$playbackState")
                         if (playbackState == PlaybackState.IDLE) {
                             playerViewModel.playAudio(it)
                         } else {

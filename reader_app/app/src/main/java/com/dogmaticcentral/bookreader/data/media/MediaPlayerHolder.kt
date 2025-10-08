@@ -16,8 +16,8 @@ fun fileSize(filePath: String): String {
     val fileSizeStr = "%.2f MB".format(fileSizeInMb)
     return fileSizeStr
 }
-class MediaPlayerHolder(private val context: Context) {
 
+class MediaPlayerHolder(private val context: Context) {
 
     private val mediaPlayer: MediaPlayer = MediaPlayer().apply {
         setOnErrorListener { mp, what, extra ->
@@ -25,11 +25,12 @@ class MediaPlayerHolder(private val context: Context) {
             false
         }
     }
-    private var  currentUri: Uri? = null
+    private var currentUri: Uri? = null
 
-    fun playAudio(audioUri: Uri,
-                  onPrepared: () -> Unit = {},
-                  onCompletion: () -> Unit = {}
+    fun playAudio(
+        audioUri: Uri,
+        onPrepared: () -> Unit = {},
+        onCompletion: () -> Unit = {}
     ) {
 
         try {
@@ -78,7 +79,16 @@ class MediaPlayerHolder(private val context: Context) {
     fun getDuration(): Int = mediaPlayer.duration
 
     fun seekTo(position: Int) {
-        mediaPlayer.seekTo(position)
+        try {
+            if (mediaPlayer.isPlaying || mediaPlayer.currentPosition > 0 || mediaPlayer.duration > 0) {
+                Log.d("MediaPlayerHolder", "seekTo($position)")
+                mediaPlayer.seekTo(position)
+            } else {
+                Log.w("MediaPlayerHolder", "seekTo() ignored – player not prepared yet")
+            }
+        } catch (e: IllegalStateException) {
+            Log.e("MediaPlayerHolder", "seekTo() failed: ${e.message}")
+        }
     }
 
     fun release() {

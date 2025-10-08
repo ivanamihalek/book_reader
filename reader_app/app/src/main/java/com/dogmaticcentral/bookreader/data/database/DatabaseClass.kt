@@ -42,53 +42,6 @@ abstract class BookReaderDatabase : RoomDatabase() {
             }
         }
 
-        fun getDatabaseFromAsset(context: Context, assetPath: String): BookReaderDatabase {
-            return INSTANCE ?: synchronized(this) {
-                // Check if asset exists
-                try {
-                    context.assets.open(assetPath).close()
-                } catch (e: Exception) {
-                    throw DatabaseNotFoundException(
-                        "Database asset not found: $assetPath"
-                    )
-                }
-
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    BookReaderDatabase::class.java,
-                    "book_reader_database"
-                )
-                    .createFromAsset(assetPath)
-                    .addCallback(DatabaseValidationCallback())
-                    .build()
-
-                INSTANCE = instance
-                instance
-            }
-        }
-
-        fun getDatabaseFromFile(context: Context, databaseFile: File): BookReaderDatabase {
-            return INSTANCE ?: synchronized(this) {
-                if (!databaseFile.exists()) {
-                    throw DatabaseNotFoundException(
-                        "Database file not found: ${databaseFile.absolutePath}"
-                    )
-                }
-
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    BookReaderDatabase::class.java,
-                    "book_reader_database"
-                )
-                    .createFromAsset("databases/bookreader.db") // This line loads your pre-made database
-                    .addCallback(DatabaseValidationCallback())
-                    .build()
-
-                INSTANCE = instance
-                instance
-            }
-        }
-
         private class DatabaseValidationCallback : RoomDatabase.Callback() {
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
