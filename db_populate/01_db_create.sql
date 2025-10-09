@@ -15,6 +15,7 @@ CREATE TABLE  IF NOT EXISTS  chapters (
     bookId INTEGER NOT NULL,
     title TEXT NOT NULL,
     fileName TEXT NOT NULL,
+    playTime INTEGER NOT NULL DEFAULT 0,
     lastPlayedPosition INTEGER NOT NULL DEFAULT 0,
     lastPlayedTimestamp INTEGER NOT NULL DEFAULT 0,
     finishedPlaying INTEGER NOT NULL DEFAULT 0,

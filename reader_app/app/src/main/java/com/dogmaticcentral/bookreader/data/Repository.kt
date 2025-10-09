@@ -138,17 +138,3 @@ suspend fun getAudioContentUri(
     }
     return uri
 }
-
-fun getAudioDuration(context: Context, audioUri: Uri): Long {
-    val retriever = MediaMetadataRetriever()
-    return try {
-        retriever.setDataSource(context, audioUri)
-        val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-        durationStr?.toLongOrNull() ?: 0L // Duration in milliseconds
-    } catch (e: Exception) {
-        e.printStackTrace()
-        0L // Return 0 if failed
-    } finally {
-        retriever.release()
-    }
-}

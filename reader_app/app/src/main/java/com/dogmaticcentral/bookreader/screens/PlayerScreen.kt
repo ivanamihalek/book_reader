@@ -17,6 +17,10 @@ import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+
 import com.dogmaticcentral.bookreader.LocalBookRepository
 import com.dogmaticcentral.bookreader.R
 import com.dogmaticcentral.bookreader.components.ScreenLayout
@@ -26,6 +30,8 @@ import com.dogmaticcentral.bookreader.viewmodel.PlayerViewModel
 import com.dogmaticcentral.bookreader.viewmodel.PlayerViewModelFactory
 import kotlinx.coroutines.delay
 import android.util.Log
+import androidx.compose.animation.core.animateFloatAsState
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlayerScreen(
@@ -49,6 +55,49 @@ fun PlayerScreen(
     val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
     var isLoadingNext by remember { mutableStateOf(false) }
 
+   ///////////////////////////////////////////////////////////////
+    suspend fun checkAndMarkChapterFinished() {
+        try {
+            val chapter = repository.getChapterById(chapterId)
+            if (chapter == null) {
+                Log.w("PlayerScreen", "No chapter found for ID $chapterId")
+                return
+            }
+
+            val playTime = chapter.playTime
+            val currentPosition = playerViewModel.currentPosition.value
+
+            if (playTime <= 0) {
+                Log.w("PlayerScreen", "Invalid playTime=$playTime for chapterId=$chapterId")
+                return
+            }
+
+            val ratio = currentPosition.toFloat() / playTime.toFloat()
+
+            if (ratio > 0.95f && !chapter.finishedPlaying) {
+                Log.d(
+                    "PlayerScreen",
+                    "Marking chapterId=$chapterId finished (pos=$currentPosition, playTime=$playTime, ratio=$ratio)"
+                )
+                repository.updatePlayData(
+                    chapterId = chapterId,
+                    position = currentPosition.toLong(),
+                    timeStopped = System.currentTimeMillis(),
+                    finishedPlaying = true
+                )
+            } else {
+                Log.v(
+                    "PlayerScreen",
+                    "Playback progress check: pos=$currentPosition / $playTime ($ratio), finished=${chapter.finishedPlaying}"
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("PlayerScreen", "Error checking finished state: ${e.message}", e)
+        }
+    }
+
+
+
     ///////////////////////////////////////////////////////////////
     //  Lifecycle observer for saving playback state on pause/stop
     DisposableEffect(lifecycleOwner) {
@@ -58,6 +107,10 @@ fun PlayerScreen(
                     playerViewModel.currentPosition.value.toLong(),
                     finishedPlaying = (playbackState == PlaybackState.COMPLETED))
             }
+            // Check if it’s effectively finished
+            playerViewModel.viewModelScope.launch {
+                checkAndMarkChapterFinished()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
@@ -66,26 +119,28 @@ fun PlayerScreen(
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
-
+    LaunchedEffect(playbackState) {
+        if (playbackState == PlaybackState.COMPLETED ||
+            playbackState == PlaybackState.PAUSED ||
+            playbackState == PlaybackState.IDLE) {
+            checkAndMarkChapterFinished()
+        }
+    }
     ///////////////////////////////////////////////////////////////
     // Coroutine for loading audio when book or chapter changes
     LaunchedEffect(bookId, chapterId) {
-        Log.d("PlayerScreen", "LaunchedEffect triggered for book=$bookId, chapter=$chapterId")
         audioFileUri = getAudioContentUri(context, repository, bookId, chapterId)
-        Log.d("PlayerScreen", "Audio URI = $audioFileUri")
 
         if (audioFileUri == null) {
-            Log.d("PlayerScreen", "Audio file not found!")
             showFileNotFoundDialog(context, bookId, chapterId)
         } else {
-            Log.d("PlayerScreen", "Initializing playerViewModel...")
             playerViewModel.initialize(context, chapterId)
-            Log.d("PlayerScreen", "Calling playAudio() immediately? playImmediately=$playImmediately")
-            if (playImmediately) {
+             if (playImmediately) {
                 playerViewModel.playAudio(audioFileUri!!)
             }
         }
     }
+
 
     ///////////////////////////////////////////////////////////////
     // Navigation state
@@ -111,7 +166,6 @@ fun PlayerScreen(
     ///////////////////////////////////////////////////////////////
     //  Lifecycle observer for tracking the changes in navigation state
     LaunchedEffect(shouldNavigate) {
-        Log.d("PlayerScreen", "LaunchedEffect triggered for shouldNavigate=$shouldNavigate")
         if (shouldNavigate) {
             playerViewModel.getNextChapterId()?.let { nextChapterId ->
                 playerViewModel.resetNavigationState()
@@ -143,7 +197,10 @@ fun PlayerScreen(
                         }
                     },
                     onRewind = { playerViewModel.seekRelative(-120000) },
-                    onForward = { playerViewModel.seekRelative(120000) }
+                    onForward = {
+                        playerViewModel.seekRelative(120000)
+                        playerViewModel.viewModelScope.launch { checkAndMarkChapterFinished() }
+                    }
                 )
             }
         }
@@ -157,21 +214,38 @@ fun PlaybackControls(
     onRewind: () -> Unit,
     onForward: () -> Unit
 ) {
-    val iconSize = 240.dp  // Make all icons equal in size visually
+    val iconSize = 240.dp
+    val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope() // for launching coroutines
+    var rewindPressed by remember { mutableStateOf(false) }
+    var forwardPressed by remember { mutableStateOf(false) }
+
+    val rewindScale by animateFloatAsState(if (rewindPressed) 0.9f else 1f)
+    val forwardScale by animateFloatAsState(if (forwardPressed) 0.9f else 1f)
 
     Row(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
-            onClick = onRewind,
-            modifier = Modifier.size(iconSize).padding(end = iconSize/3)
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onRewind()
+                rewindPressed = true
+                coroutineScope.launch {
+                    delay(100)
+                    rewindPressed = false
+                }
+            },
+            modifier = Modifier
+                .size(iconSize)
+                .padding(end = iconSize / 3)
+                .graphicsLayer(scaleX = rewindScale, scaleY = rewindScale)
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_rewind),
                 contentDescription = "Rewind",
                 modifier = Modifier.fillMaxSize()
-
             )
         }
 
@@ -192,8 +266,19 @@ fun PlaybackControls(
         }
 
         IconButton(
-            onClick = onForward,
-            modifier = Modifier.size(iconSize).padding(start = iconSize/3)
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onForward()
+                forwardPressed = true
+                coroutineScope.launch {
+                    delay(100)
+                    forwardPressed = false
+                }
+            },
+            modifier = Modifier
+                .size(iconSize)
+                .padding(start = iconSize / 3)
+                .graphicsLayer(scaleX = forwardScale, scaleY = forwardScale)
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_forward),

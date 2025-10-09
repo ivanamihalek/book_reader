@@ -40,6 +40,9 @@ data class Chapter(
     @ColumnInfo(name = "fileName")
     val fileName: String,
 
+    @ColumnInfo(name = "playTime", defaultValue = "0")
+    val playTime: Int = 0,
+
     @ColumnInfo(name = "lastPlayedPosition", defaultValue = "0")
     val lastPlayedPosition: Int = 0,
 

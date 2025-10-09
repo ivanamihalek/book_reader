@@ -5,6 +5,8 @@ import os
 import sqlite3
 import subprocess
 from typing import List, Tuple
+from mutagen.mp3 import MP3
+from mutagen import MutagenError
 
 from peewee import SqliteDatabase, Model, AutoField, CharField, IntegerField, ForeignKeyField, DatabaseError, Proxy
 
@@ -32,6 +34,7 @@ class Chapter(Model):
     book = ForeignKeyField(Book, backref='chapters', on_delete='CASCADE', column_name='bookId')
     title = CharField()
     fileName = CharField()
+    playTime = IntegerField(default=0)
     lastPlayedPosition = IntegerField(default=0)
     lastPlayedTimestamp = IntegerField(default=0)
 
@@ -227,6 +230,7 @@ def calculate_md5(file_path: str) -> str:
         return ""
 
 
+
 def get_device_md5(device_name: str,  device_path: str) -> str:
     """Get MD5 checksum of a file on the device using ADB."""
     try:
@@ -251,6 +255,42 @@ def table_exists(db: SqliteDatabase, table_name: str) -> bool:
         print(f"Error checking if table {table_name} exists: {e}")
         return False
 
+def get_mp3_duration_in_ms(mp3_path: str) -> int:
+    """
+    Returns the playback duration of an MP3 file in milliseconds.
+
+    This function reads the MP3 file header and extracts duration information
+    using the `mutagen` library. It raises descriptive exceptions for common
+    failure cases such as missing files, incorrect file types, or unreadable files.
+
+    Parameters:
+        mp3_path (str): The absolute or relative path to the MP3 file.
+
+    Returns:
+        int: The total duration of the MP3 file, in milliseconds.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file extension is not `.mp3`.
+        RuntimeError: If the file cannot be read or parsed for duration.
+    """
+    if not os.path.exists(mp3_path):
+        raise FileNotFoundError(f"The file '{mp3_path}' does not exist.")
+
+    if not mp3_path.lower().endswith(".mp3"):
+        raise ValueError(f"The file '{mp3_path}' is not an MP3 file.")
+
+    try:
+        audio = MP3(mp3_path)
+        duration_seconds = audio.info.length
+        duration_ms = int(duration_seconds * 1000)
+        return duration_ms
+    except MutagenError as e:
+        raise RuntimeError(f"Failed to read MP3 metadata for '{mp3_path}': {e}")
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred while processing '{mp3_path}': {e}")
+
+
 
 def store_book_in_db(db: SqliteDatabase, title: str, author: str, dry_run: bool = False) -> int:
     """Store book details in the database and return the book ID."""
@@ -271,7 +311,8 @@ def store_book_in_db(db: SqliteDatabase, title: str, author: str, dry_run: bool 
             raise
 
 
-def store_chapter_in_db(db: SqliteDatabase, book: Book, title: str, file_name: str, dry_run: bool = False) -> None:
+def store_chapter_in_db(db: SqliteDatabase, book: Book, title: str, file_name: str, play_time: int,
+                        dry_run: bool = False) -> None:
     """Store chapter details in the database."""
     if not dry_run:
         try:
@@ -282,6 +323,7 @@ def store_chapter_in_db(db: SqliteDatabase, book: Book, title: str, file_name: s
                     fileName=file_name,
                     defaults={
                         'title': title,
+                        'playTime': play_time,
                         'lastPlayedPosition': 0,
                         'lastPlayedTimestamp': 0
                     }
@@ -289,12 +331,20 @@ def store_chapter_in_db(db: SqliteDatabase, book: Book, title: str, file_name: s
                 if created:
                     print(f"Stored chapter in database: {title} ({file_name}) with ID {chapter.id}")
                 else:
-                    print(f"Chapter already exists in database: {title} ({file_name}) with ID {chapter.id}")
+                    # Update playTime if chapter already exists
+                    if chapter.playTime != play_time:
+                        print(f"Updated playTime for existing chapter: {title} ({file_name}) with ID {chapter.id} "
+                              f"- old: {chapter.playTime}ms, new: {play_time}ms")
+                        chapter.playTime = play_time
+                        chapter.save()
+                    else:
+                        print(f"Chapter already exists with same playTime ({play_time}ms): {title} ({file_name}) with ID {chapter.id}")
         except Exception as e:
             print(f"Error storing chapter in database: {e}")
             raise
     else:
-        print(f"[Dry Run] Would store chapter in database: {title} ({file_name})")
+        print(f"[Dry Run] Would store chapter in database: {title} ({file_name}; "
+              f"play time {play_time}ms ({play_time/60000:.2f}min))")
 
 
 def copy_file_to_device(device_name: str, local_path: str, device_path: str, dry_run: bool = False) -> None:
@@ -394,13 +444,11 @@ def main():
             local_file_path = os.path.join(directory_path, mp3_file)
             device_file_path = os.path.join(device_book_dir, mp3_file)
             chapter_title = os.path.splitext(mp3_file)[0]
+            play_time = get_mp3_duration_in_ms(local_file_path)
 
             # Copy file to device (with MD5 check)
             copy_file_to_device(device_name, local_file_path, device_file_path, dry_run)
-
-            # Store chapter in database
-            if book:
-                store_chapter_in_db(db, book, chapter_title, mp3_file, dry_run)
+            store_chapter_in_db(db, book, chapter_title, mp3_file, play_time, dry_run)
 
         # Verify database contents (for debugging)
         if not dry_run:

@@ -46,6 +46,11 @@ fun ChaptersScreen(navController: NavHostController, bookId: Int) {
                                     width = 4.dp,
                                     color = Color.Red
                                 )
+                            } else if (chapter.finishedPlaying) {
+                                Modifier.border(
+                                    width = 4.dp,
+                                    color = Color.Blue
+                                )
                             } else {
                                 Modifier
                             }
