@@ -17,6 +17,7 @@ import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -31,6 +32,12 @@ import com.dogmaticcentral.bookreader.viewmodel.PlayerViewModelFactory
 import kotlinx.coroutines.delay
 import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.draw.clip
 import kotlinx.coroutines.launch
 
 @Composable
@@ -181,10 +188,13 @@ fun PlayerScreen(
         showBackButton = true,
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 32.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Playback controls
             audioFileUri?.let {
                 PlaybackControls(
                     playbackState = playbackState,
@@ -203,8 +213,26 @@ fun PlayerScreen(
                     }
                 )
             }
+
+            // Adjustable spacing between controls and slider
+            Spacer(modifier = Modifier.height(72.dp))  // CHANGE THIS VALUE TO ADJUST DISTANCE
+
+            // Position slider
+            PositionSlider(
+                currentPosition = playerViewModel.currentPosition.collectAsState().value,
+                duration = playerViewModel.duration.collectAsState().value,
+                playbackState = playbackState,
+                onSeekStart = { playerViewModel.pauseForSeeking() },
+                onSeekEnd = { position ->
+                    playerViewModel.seekTo(position)
+                    playerViewModel.resumeAfterSeeking()
+                },
+                modifier = Modifier.fillMaxWidth(0.75f)
+            )
         }
     }
+
+
 }
 
 @Composable
@@ -215,13 +243,32 @@ fun PlaybackControls(
     onForward: () -> Unit
 ) {
     val iconSize = 240.dp
-    val haptic = LocalHapticFeedback.current
-    val coroutineScope = rememberCoroutineScope() // for launching coroutines
-    var rewindPressed by remember { mutableStateOf(false) }
-    var forwardPressed by remember { mutableStateOf(false) }
 
-    val rewindScale by animateFloatAsState(if (rewindPressed) 0.9f else 1f)
-    val forwardScale by animateFloatAsState(if (forwardPressed) 0.9f else 1f)
+    val coroutineScope = rememberCoroutineScope() // for launching coroutines
+
+    val context = LocalContext.current
+
+    // Create MediaPlayer for click sound
+    val clickSound = remember {
+        android.media.MediaPlayer.create(context, R.raw.click)
+    }
+
+    // Clean up when composable is disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            clickSound?.release()
+        }
+    }
+
+    fun playClickSound() {
+        clickSound?.let {
+            if (it.isPlaying) {
+                it.seekTo(0)
+            }
+            it.start()
+        }
+    }
+
 
     Row(
         horizontalArrangement = Arrangement.Center,
@@ -229,18 +276,12 @@ fun PlaybackControls(
     ) {
         IconButton(
             onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                playClickSound()
                 onRewind()
-                rewindPressed = true
-                coroutineScope.launch {
-                    delay(100)
-                    rewindPressed = false
-                }
             },
             modifier = Modifier
                 .size(iconSize)
                 .padding(end = iconSize / 3)
-                .graphicsLayer(scaleX = rewindScale, scaleY = rewindScale)
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_rewind),
@@ -250,7 +291,9 @@ fun PlaybackControls(
         }
 
         IconButton(
-            onClick = onPlayPause,
+            onClick = {
+                onPlayPause()
+            },
             modifier = Modifier.size(iconSize)
         ) {
             Icon(
@@ -267,18 +310,12 @@ fun PlaybackControls(
 
         IconButton(
             onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                playClickSound()
                 onForward()
-                forwardPressed = true
-                coroutineScope.launch {
-                    delay(100)
-                    forwardPressed = false
-                }
             },
             modifier = Modifier
                 .size(iconSize)
                 .padding(start = iconSize / 3)
-                .graphicsLayer(scaleX = forwardScale, scaleY = forwardScale)
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_forward),
@@ -287,6 +324,80 @@ fun PlaybackControls(
             )
         }
     }
+}
+
+// TODO - move everything a bit up so the weight center is in the middle not jus the buttons
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PositionSlider(
+    currentPosition: Int,
+    duration: Int,
+    playbackState: PlaybackState,
+    onSeekStart: () -> Unit,
+    onSeekEnd: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isUserSeeking by remember { mutableStateOf(false) }
+    var seekPosition by remember { mutableStateOf(0f) }
+
+    val displayPosition = if (isUserSeeking) seekPosition else currentPosition.toFloat()
+
+    androidx.compose.material3.Slider(
+        value = displayPosition,
+        onValueChange = { newValue ->
+            if (!isUserSeeking) {
+                isUserSeeking = true
+                onSeekStart()
+            }
+            seekPosition = newValue
+        },
+        onValueChangeFinished = {
+            isUserSeeking = false
+            onSeekEnd(seekPosition.toInt())
+        },
+        valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+        colors = SliderDefaults.colors(
+            thumbColor = Color.Black,
+            activeTrackColor = Color.Black,
+            inactiveTrackColor = Color.White
+        ),
+        thumb = {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)  // Circle size - adjust as needed
+                    .background(Color.Black, shape = androidx.compose.foundation.shape.CircleShape)
+            )
+        },
+        track = { sliderState ->
+            val shape = RoundedCornerShape(12.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .clip(shape) // ensures rounded corners apply to everything inside
+                    .border(
+                        width = 6.dp,
+                        color = Color.Black,
+                        shape = shape
+                    )
+                    .background(Color.White, shape) // background inside border
+            ) {
+
+                // The default track respects clipping
+                SliderDefaults.Track(
+                    sliderState = sliderState,
+                    modifier = Modifier
+                        .fillMaxSize(),
+                     colors = SliderDefaults.colors(
+                        activeTrackColor = Color.Black,
+                        inactiveTrackColor = Color.Transparent // no gray showing
+                    )
+                )
+            }
+        },
+
+         modifier = modifier
+    )
 }
 
 fun showFileNotFoundDialog(context: Context, bookId: Int, chapterId: Int) {

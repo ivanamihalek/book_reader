@@ -97,13 +97,14 @@ class PlayerViewModel(
                 Log.d("PlayerViewModel", "onPrepared → seeking to $restorePos")
                 mediaPlayerHolder.seekTo(restorePos)
 
+                _duration.value = mediaPlayerHolder.getDuration()  // ADD THIS LINE
+
                 _playbackState.value = PlaybackState.PLAYING
                 startProgressUpdates()
             },
             onCompletion = {
                 _playbackState.value = PlaybackState.COMPLETED
                 chapterFinished = true
-                // Use independent scope so it isn’t cancelled on ViewModel clear
                 savePlaybackState(_currentPosition.value.toLong(), finishedPlaying = true)
                 checkShouldNavigateToNextChapter()
             }
@@ -185,4 +186,26 @@ class PlayerViewModel(
         mediaPlayerHolder.release()
         super.onCleared()
     }
+
+    private val _duration = MutableStateFlow(0)
+    val duration: StateFlow<Int> = _duration
+
+    private var wasPlayingBeforeSeek = false
+
+    fun pauseForSeeking() {
+        wasPlayingBeforeSeek = (playbackState.value == PlaybackState.PLAYING)
+        if (wasPlayingBeforeSeek) {
+            mediaPlayerHolder.pause()
+            _playbackState.value = PlaybackState.PAUSED
+        }
+    }
+
+    fun resumeAfterSeeking() {
+        if (wasPlayingBeforeSeek) {
+            mediaPlayerHolder.resume()
+            _playbackState.value = PlaybackState.PLAYING
+            startProgressUpdates()
+        }
+    }
+
 }

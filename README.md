@@ -9,3 +9,4 @@ For developers:
 * [working with emulator](doc/working_with_emulator.md)
 
 
+click.wav is currently mixkit-modern-click-box-check-1120.wav
