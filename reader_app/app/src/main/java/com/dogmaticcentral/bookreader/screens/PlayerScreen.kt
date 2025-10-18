@@ -141,8 +141,12 @@ fun PlayerScreen(
         if (audioFileUri == null) {
             showFileNotFoundDialog(context, bookId, chapterId)
         } else {
+            // This is a suspend call. The LaunchedEffect will wait
+            // for it to complete before moving on.
             playerViewModel.initialize(context, chapterId)
-             if (playImmediately) {
+
+            // This will only be called AFTER initialize is fully done
+            if (playImmediately) {
                 playerViewModel.playAudio(audioFileUri!!)
             }
         }
@@ -225,6 +229,7 @@ fun PlayerScreen(
                 onSeekStart = { playerViewModel.pauseForSeeking() },
                 onSeekEnd = { position ->
                     playerViewModel.seekTo(position)
+                    playerViewModel.savePlaybackState(position.toLong())
                     playerViewModel.resumeAfterSeeking()
                 },
                 modifier = Modifier.fillMaxWidth(0.75f)
@@ -340,7 +345,16 @@ fun PositionSlider(
     var isUserSeeking by remember { mutableStateOf(false) }
     var seekPosition by remember { mutableStateOf(0f) }
 
-    val displayPosition = if (isUserSeeking) seekPosition else currentPosition.toFloat()
+    // Define the valid maximum duration, ensuring it's at least 1f to prevent
+    // an invalid range (e.g., 0f..0f) which can also cause crashes.
+    val maxDuration = duration.toFloat().coerceAtLeast(1f)
+
+    // Determine the position to display
+    val rawPosition = if (isUserSeeking) seekPosition else currentPosition.toFloat()
+
+    // **THE FIX:**
+    // Coerce (clamp) the display position to always be within the valid range.
+    val displayPosition = rawPosition.coerceIn(0f, maxDuration)
 
     androidx.compose.material3.Slider(
         value = displayPosition,
@@ -349,13 +363,16 @@ fun PositionSlider(
                 isUserSeeking = true
                 onSeekStart()
             }
-            seekPosition = newValue
+            // The slider itself should only emit values within the range,
+            // but coercing here is extra defense.
+            seekPosition = newValue.coerceIn(0f, maxDuration)
         },
         onValueChangeFinished = {
             isUserSeeking = false
-            onSeekEnd(seekPosition.toInt())
+            // Also coerce the final seek position just to be safe.
+            onSeekEnd(seekPosition.coerceIn(0f, maxDuration).toInt())
         },
-        valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+        valueRange = 0f..maxDuration, // Use the sanitized maxDuration
         colors = SliderDefaults.colors(
             thumbColor = Color.Black,
             activeTrackColor = Color.Black,
@@ -364,7 +381,7 @@ fun PositionSlider(
         thumb = {
             Box(
                 modifier = Modifier
-                    .size(56.dp)  // Circle size - adjust as needed
+                    .size(56.dp)
                     .background(Color.Black, shape = androidx.compose.foundation.shape.CircleShape)
             )
         },
@@ -374,31 +391,28 @@ fun PositionSlider(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(32.dp)
-                    .clip(shape) // ensures rounded corners apply to everything inside
+                    .clip(shape)
                     .border(
                         width = 6.dp,
                         color = Color.Black,
                         shape = shape
                     )
-                    .background(Color.White, shape) // background inside border
+                    .background(Color.White, shape)
             ) {
-
-                // The default track respects clipping
                 SliderDefaults.Track(
                     sliderState = sliderState,
-                    modifier = Modifier
-                        .fillMaxSize(),
-                     colors = SliderDefaults.colors(
+                    modifier = Modifier.fillMaxSize(),
+                    colors = SliderDefaults.colors(
                         activeTrackColor = Color.Black,
-                        inactiveTrackColor = Color.Transparent // no gray showing
+                        inactiveTrackColor = Color.Transparent
                     )
                 )
             }
         },
-
-         modifier = modifier
+        modifier = modifier
     )
 }
+
 
 fun showFileNotFoundDialog(context: Context, bookId: Int, chapterId: Int) {
     AlertDialog.Builder(context)

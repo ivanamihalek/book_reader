@@ -13,8 +13,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class PlaybackState {
@@ -38,7 +41,8 @@ class PlayerViewModel(
 
     private val _navigationInfo = MutableStateFlow<BookRepository.ChapterNavigationInfo?>(null)
     val navigationInfo: StateFlow<BookRepository.ChapterNavigationInfo?> = _navigationInfo.asStateFlow()
-
+    val duration: StateFlow<Int> = navigationInfo.map { it?.duration ?: 0 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     private val _shouldNavigateToNextChapter = MutableStateFlow(false)
     val shouldNavigateToNextChapter: StateFlow<Boolean> = _shouldNavigateToNextChapter.asStateFlow()
 
@@ -48,7 +52,7 @@ class PlayerViewModel(
     // Track completion
     private var chapterFinished = false
 
-    fun initialize(context: Context, chapterId: Int) {
+    suspend fun initialize(context: Context, chapterId: Int) {
         Log.d("PlayerViewModel", "initialize() called for chapter=$chapterId")
         if (!::mediaPlayerHolder.isInitialized) {
             mediaPlayerHolder = MediaPlayerHolder(context)
@@ -59,13 +63,11 @@ class PlayerViewModel(
         loadNavigationInfo(chapterId)
         Log.d("PlayerViewModel", "restoring Last Played Position")
         restoreLastPlayedPosition()
-        Log.d("PlayerViewModel", "initialie() done")
+        Log.d("PlayerViewModel", "initialize() done")
     }
 
-    private fun loadNavigationInfo(chapterId: Int) {
-        viewModelScope.launch {
-            _navigationInfo.value = repository.getChapterNavigationInfo(chapterId)
-        }
+    private suspend fun loadNavigationInfo(chapterId: Int) {
+        _navigationInfo.value = repository.getChapterNavigationInfo(chapterId)
     }
 
     private fun debugSeekTo(label: String, position: Int) {
@@ -79,13 +81,11 @@ class PlayerViewModel(
         }
     }
 
-    private fun restoreLastPlayedPosition() {
+    private suspend fun restoreLastPlayedPosition() {
         currentChapterId?.let { chapterId ->
-            viewModelScope.launch {
-                val lastPosition = repository.getChapterById(chapterId)?.lastPlayedPosition ?: 0L
-                val startPosition = (lastPosition.toLong() - 10000L).coerceAtLeast(0L).toInt()
-                _currentPosition.value = startPosition
-            }
+            val lastPosition = repository.getChapterById(chapterId)?.lastPlayedPosition ?: 0L
+            val startPosition = (lastPosition.toLong() - 10000L).coerceAtLeast(0L).toInt()
+            _currentPosition.value = startPosition
         }
     }
 
@@ -96,9 +96,6 @@ class PlayerViewModel(
                 val restorePos = _currentPosition.value
                 Log.d("PlayerViewModel", "onPrepared → seeking to $restorePos")
                 mediaPlayerHolder.seekTo(restorePos)
-
-                _duration.value = mediaPlayerHolder.getDuration()  // ADD THIS LINE
-
                 _playbackState.value = PlaybackState.PLAYING
                 startProgressUpdates()
             },
@@ -114,7 +111,7 @@ class PlayerViewModel(
     fun seekRelative(deltaMillis: Int) {
         val newPosition = (_currentPosition.value + deltaMillis)
             .coerceAtLeast(0)
-            .coerceAtMost(mediaPlayerHolder.getDuration())
+            .coerceAtMost(duration.value)
         mediaPlayerHolder.seekTo(newPosition)
         _currentPosition.value = newPosition
     }
@@ -187,8 +184,6 @@ class PlayerViewModel(
         super.onCleared()
     }
 
-    private val _duration = MutableStateFlow(0)
-    val duration: StateFlow<Int> = _duration
 
     private var wasPlayingBeforeSeek = false
 

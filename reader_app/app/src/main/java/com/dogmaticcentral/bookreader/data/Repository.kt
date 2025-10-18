@@ -59,12 +59,14 @@ class BookRepository(
         val isFirstChapter: Boolean,
         val isLastChapter: Boolean,
         val chapterPosition: Int,
-        val totalChapters: Int
+        val totalChapters: Int,
+        val duration: Int
     )
     suspend fun getChapterNavigationInfo(chapterId: Int): ChapterNavigationInfo? {
         val chapterIds = chapterDao.getAllChapterIdsInSameBook(chapterId)
         val currentIndex = chapterIds.indexOf(chapterId)
         if (currentIndex == -1) return null
+        val chapter = getChapterById(chapterId)
 
         return ChapterNavigationInfo(
             currentChapterId = chapterId,
@@ -73,7 +75,8 @@ class BookRepository(
             isFirstChapter = currentIndex == 0,
             isLastChapter = currentIndex == chapterIds.lastIndex,
             chapterPosition = currentIndex + 1,
-            totalChapters = chapterIds.size
+            totalChapters = chapterIds.size,
+            duration = chapter?.playTime ?: 0
         )
     }
 
