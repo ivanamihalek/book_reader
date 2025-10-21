@@ -32,11 +32,15 @@ fun AppNavigation(navController: NavHostController) {
         }
 
         composable(
-            route = "player/{bookId}/{chapterId}?playImmediately={playImmediately}",
+            route = "player/{bookId}/{chapterId}?playImmediately={playImmediately}&fromPrevious={fromPrevious}",
             arguments = listOf(
                 navArgument("bookId") { type = NavType.IntType },
                 navArgument("chapterId") { type = NavType.IntType },
                 navArgument("playImmediately") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                },
+                navArgument("fromPrevious") {
                     type = NavType.BoolType
                     defaultValue = false
                 }
@@ -46,7 +50,8 @@ fun AppNavigation(navController: NavHostController) {
                 navController,
                 bookId = backStackEntry.arguments?.getInt("bookId") ?: 1,
                 chapterId = backStackEntry.arguments?.getInt("chapterId") ?: 1,
-                playImmediately = backStackEntry.arguments?.getBoolean("playImmediately") ?: false
+                playImmediately = backStackEntry.arguments?.getBoolean("playImmediately") ?: false,
+                fromPrevious = backStackEntry.arguments?.getBoolean("fromPrevious") ?: false
             )
         }
     }

@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import kotlinx.coroutines.launch
 
 @Composable
@@ -46,6 +47,7 @@ fun PlayerScreen(
     bookId: Int,
     chapterId: Int,
     playImmediately: Boolean,
+    fromPrevious: Boolean = false,
     playerViewModel: PlayerViewModel = viewModel(
         factory = PlayerViewModelFactory(
             LocalBookRepository.current,
@@ -53,14 +55,17 @@ fun PlayerScreen(
         )
     )
 ) {
-
+    Log.w("PlayerScreen", "I am in PlayerScreen(), chapterId is $chapterId, fromPrevious is $fromPrevious")
     // Let's define the local context first
     val context = LocalContext.current
     val repository = LocalBookRepository.current
     val playbackState by playerViewModel.playbackState.collectAsState()
     var audioFileUri by remember { mutableStateOf<Uri?>(null) }
     val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
+
     var isLoadingNext by remember { mutableStateOf(false) }
+    // TODO - whena re we ready fo the UI?
+    var isReadyForUI by remember { mutableStateOf(true) }
 
    ///////////////////////////////////////////////////////////////
     suspend fun checkAndMarkChapterFinished() {
@@ -103,8 +108,6 @@ fun PlayerScreen(
         }
     }
 
-
-
     ///////////////////////////////////////////////////////////////
     //  Lifecycle observer for saving playback state on pause/stop
     DisposableEffect(lifecycleOwner) {
@@ -126,10 +129,12 @@ fun PlayerScreen(
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
+
     LaunchedEffect(playbackState) {
         if (playbackState == PlaybackState.COMPLETED ||
             playbackState == PlaybackState.PAUSED ||
-            playbackState == PlaybackState.IDLE) {
+            playbackState == PlaybackState.IDLE
+        ) {
             checkAndMarkChapterFinished()
         }
     }
@@ -140,10 +145,11 @@ fun PlayerScreen(
 
         if (audioFileUri == null) {
             showFileNotFoundDialog(context, bookId, chapterId)
+
         } else {
             // This is a suspend call. The LaunchedEffect will wait
             // for it to complete before moving on.
-            playerViewModel.initialize(context, chapterId)
+            playerViewModel.initialize(context, chapterId, ignoreLastPlayed = fromPrevious)
 
             // This will only be called AFTER initialize is fully done
             if (playImmediately) {
@@ -164,11 +170,12 @@ fun PlayerScreen(
         nextChapterId?.let { nextId ->
             playerViewModel.savePlaybackState(
                 playerViewModel.currentPosition.value.toLong(),
-                finishedPlaying = (playbackState == PlaybackState.COMPLETED))
+                finishedPlaying = (playbackState == PlaybackState.COMPLETED)
+            )
             playerViewModel.stop()
             isLoadingNext = true
             navController.popBackStack()
-            navController.navigate("player/$bookId/$nextId?playImmediately=true") {
+            navController.navigate("player/$bookId/$nextId?playImmediately=true&fromPrevious=true") {
                 launchSingleTop = true
             }
         }
@@ -187,54 +194,68 @@ fun PlayerScreen(
 
     ///////////////////////////////////////////////////////////////
     //  UI Layout
-    ScreenLayout(
-        navController = navController,
-        showBackButton = true,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 32.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+    if (!isReadyForUI) {
+         // Blank screen while loading
+        Box(modifier = Modifier.fillMaxSize())
+
+    } else {
+        ScreenLayout(
+            navController = navController,
+            showBackButton = true,
         ) {
-            // Playback controls
-            audioFileUri?.let {
-                PlaybackControls(
-                    playbackState = playbackState,
-                    onPlayPause = {
-                        Log.d("PlayerScreen", "onPlayPause playbackState=$playbackState")
-                        if (playbackState == PlaybackState.IDLE) {
-                            playerViewModel.playAudio(it)
-                        } else {
-                            playerViewModel.togglePlayPause()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp),
+                verticalArrangement = Arrangement.Top,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                val configuration = LocalConfiguration.current
+                val screenHeight = configuration.screenHeightDp.dp
+                val topOffset = 0.12f // 15% from top, adjust as needed
+                val midSpaceFraction = 0.15f
+
+                Spacer(modifier = Modifier.height(screenHeight * topOffset))
+                // Playback controls
+                audioFileUri?.let {
+                    PlaybackControls(
+                        playbackState = playbackState,
+                        onPlayPause = {
+                            Log.d("PlayerScreen", "onPlayPause  before playbackState=$playbackState")
+                            if (playbackState == PlaybackState.IDLE) {
+                                playerViewModel.playAudio(it)
+                            } else {
+                                playerViewModel.togglePlayPause()
+                            }
+                            Log.d("PlayerScreen", "onPlayPause  after playbackState=$playbackState")
+                        },
+                        onRewind = { playerViewModel.seekRelative(-120000) },
+                        onForward = {
+                            playerViewModel.seekRelative(120000)
+                            playerViewModel.viewModelScope.launch { checkAndMarkChapterFinished() }
                         }
+                    )
+                }
+
+                // Adjustable spacing between controls and slider
+                Spacer(modifier = Modifier.height(screenHeight * midSpaceFraction))  // CHANGE THIS VALUE TO ADJUST DISTANCE
+
+                // Position slider
+                PositionSlider(
+                    currentPosition = playerViewModel.currentPosition.collectAsState().value,
+                    duration = playerViewModel.duration.collectAsState().value,
+                    playbackState = playbackState,
+                    onSeekStart = { playerViewModel.pauseForSeeking() },
+                    onSeekEnd = { position ->
+                        playerViewModel.seekTo(position)
+                        playerViewModel.savePlaybackState(position.toLong())
+                        playerViewModel.resumeAfterSeeking()
                     },
-                    onRewind = { playerViewModel.seekRelative(-120000) },
-                    onForward = {
-                        playerViewModel.seekRelative(120000)
-                        playerViewModel.viewModelScope.launch { checkAndMarkChapterFinished() }
-                    }
+                    modifier = Modifier.fillMaxWidth(0.75f)
                 )
             }
-
-            // Adjustable spacing between controls and slider
-            Spacer(modifier = Modifier.height(72.dp))  // CHANGE THIS VALUE TO ADJUST DISTANCE
-
-            // Position slider
-            PositionSlider(
-                currentPosition = playerViewModel.currentPosition.collectAsState().value,
-                duration = playerViewModel.duration.collectAsState().value,
-                playbackState = playbackState,
-                onSeekStart = { playerViewModel.pauseForSeeking() },
-                onSeekEnd = { position ->
-                    playerViewModel.seekTo(position)
-                    playerViewModel.savePlaybackState(position.toLong())
-                    playerViewModel.resumeAfterSeeking()
-                },
-                modifier = Modifier.fillMaxWidth(0.75f)
-            )
         }
+
     }
 
 
@@ -331,7 +352,6 @@ fun PlaybackControls(
     }
 }
 
-// TODO - move everything a bit up so the weight center is in the middle not jus the buttons
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PositionSlider(

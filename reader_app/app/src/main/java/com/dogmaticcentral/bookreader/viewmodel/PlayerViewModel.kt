@@ -52,7 +52,7 @@ class PlayerViewModel(
     // Track completion
     private var chapterFinished = false
 
-    suspend fun initialize(context: Context, chapterId: Int) {
+    suspend fun initialize(context: Context, chapterId: Int, ignoreLastPlayed: Boolean = false) {
         Log.d("PlayerViewModel", "initialize() called for chapter=$chapterId")
         if (!::mediaPlayerHolder.isInitialized) {
             mediaPlayerHolder = MediaPlayerHolder(context)
@@ -60,9 +60,19 @@ class PlayerViewModel(
         Log.d("PlayerViewModel", "mediaPlayerHolder.isInitialized ${::mediaPlayerHolder.isInitialized}")
         currentChapterId = chapterId
         Log.d("PlayerViewModel", "loading navigation info")
+
         loadNavigationInfo(chapterId)
-        Log.d("PlayerViewModel", "restoring Last Played Position")
-        restoreLastPlayedPosition()
+        if (ignoreLastPlayed) {
+            // when we come from the previous chapter, we want to keep playing in order
+            // that is, start the next chapter from 0
+            // not from where we were three days ago
+            Log.d("PlayerViewModel", "moving back **** to the beginning of the audio")
+            _currentPosition.value = 0
+
+        } else {
+            Log.d("PlayerViewModel", "restoring Last Played Position")
+            restoreLastPlayedPosition()
+        }
         Log.d("PlayerViewModel", "initialize() done")
     }
 
