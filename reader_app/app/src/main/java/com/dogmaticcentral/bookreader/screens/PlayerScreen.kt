@@ -55,7 +55,6 @@ fun PlayerScreen(
         )
     )
 ) {
-    Log.w("PlayerScreen", "I am in PlayerScreen(), chapterId is $chapterId, fromPrevious is $fromPrevious")
     // Let's define the local context first
     val context = LocalContext.current
     val repository = LocalBookRepository.current
@@ -64,8 +63,7 @@ fun PlayerScreen(
     val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
 
     var isLoadingNext by remember { mutableStateOf(false) }
-    // TODO - whena re we ready fo the UI?
-    var isReadyForUI by remember { mutableStateOf(true) }
+    var isReadyForUI by remember { mutableStateOf(false) }
 
    ///////////////////////////////////////////////////////////////
     suspend fun checkAndMarkChapterFinished() {
@@ -150,11 +148,11 @@ fun PlayerScreen(
             // This is a suspend call. The LaunchedEffect will wait
             // for it to complete before moving on.
             playerViewModel.initialize(context, chapterId, ignoreLastPlayed = fromPrevious)
-
             // This will only be called AFTER initialize is fully done
             if (playImmediately) {
                 playerViewModel.playAudio(audioFileUri!!)
             }
+            isReadyForUI = true
         }
     }
 
@@ -221,14 +219,12 @@ fun PlayerScreen(
                     PlaybackControls(
                         playbackState = playbackState,
                         onPlayPause = {
-                            Log.d("PlayerScreen", "onPlayPause  before playbackState=$playbackState")
                             if (playbackState == PlaybackState.IDLE) {
                                 playerViewModel.playAudio(it)
                             } else {
                                 playerViewModel.togglePlayPause()
                             }
-                            Log.d("PlayerScreen", "onPlayPause  after playbackState=$playbackState")
-                        },
+                         },
                         onRewind = { playerViewModel.seekRelative(-120000) },
                         onForward = {
                             playerViewModel.seekRelative(120000)
