@@ -38,7 +38,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.launch
 
 @Composable
@@ -392,14 +394,15 @@ fun PositionSlider(
         colors = SliderDefaults.colors(
             thumbColor = Color.Black,
             activeTrackColor = Color.Black,
-            inactiveTrackColor = Color.White
+            inactiveTrackColor = Color.Blue
         ),
         thumb = {
+            val circleShape =  androidx.compose.foundation.shape.CircleShape
             Box(
                 modifier = Modifier
                     .size(56.dp)
-                    .background(Color.Black, shape = androidx.compose.foundation.shape.CircleShape)
-            )
+                    .background(Color.Black, shape = circleShape)
+             )
         },
         track = { sliderState ->
             val shape = RoundedCornerShape(12.dp)
@@ -420,7 +423,7 @@ fun PositionSlider(
                     modifier = Modifier.fillMaxSize(),
                     colors = SliderDefaults.colors(
                         activeTrackColor = Color.Black,
-                        inactiveTrackColor = Color.Transparent
+                        inactiveTrackColor = Color.Blue.copy(alpha = 0.5f)
                     )
                 )
             }
