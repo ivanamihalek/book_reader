@@ -1,13 +1,11 @@
 <!-- app/src/main/AndroidManifest.xml -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-
     package="com.dogmaticcentral.bookreader">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"  />
-
 
     <application
         android:requestLegacyExternalStorage="true"
@@ -20,12 +18,28 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.BookReader">
-        <!--  tools:targetApi="31"> studio claims this is unnecessary bcs the SDK is always gt 31 -->
 
+        <!-- Main user activity -->
         <activity
             android:name=".MainActivity"
             android:screenOrientation="landscape"
             android:exported="true"
+            android:taskAffinity=".main"
+            android:theme="@style/Theme.BookReader">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Administrator activity -->
+        <activity
+            android:name=".AdminActivity"
+            android:exported="true"
+            android:taskAffinity=".admin"
+            android:icon="@mipmap/ic_launcher_admin"
+            android:label="@string/admin_app_name"
             android:theme="@style/Theme.BookReader">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -33,13 +47,5 @@
             </intent-filter>
         </activity>
 
-        <!-- Add service for media playback -->
-        <!--service
-            android:name="androidx.media3.session.MediaLibraryService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="androidx.media3.session.MediaLibraryService" />
-            </intent-filter>
-        </service -->
     </application>
 </manifest>
