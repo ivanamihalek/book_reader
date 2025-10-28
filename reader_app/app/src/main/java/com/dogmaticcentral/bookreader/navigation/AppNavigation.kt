@@ -1,14 +1,13 @@
 // navigation/AppNavigation.kt
 package com.dogmaticcentral.bookreader.navigation
 
-import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.dogmaticcentral.bookreader.screens.HomeScreen
+import com.dogmaticcentral.bookreader.screens.BookScreen
 import com.dogmaticcentral.bookreader.screens.ChaptersScreen
 import com.dogmaticcentral.bookreader.screens.PlayerScreen
 
@@ -19,7 +18,7 @@ const val PLAYER_ROUTE = "player/{bookId}/{chapterId}"
 @Composable
 fun AppNavigation(navController: NavHostController) {
     NavHost(navController, startDestination = HOME_ROUTE) {
-        composable(HOME_ROUTE) { HomeScreen(navController) }
+        composable(HOME_ROUTE) { BookScreen(navController) }
 
         composable(
             route = "chapters/{bookId}",

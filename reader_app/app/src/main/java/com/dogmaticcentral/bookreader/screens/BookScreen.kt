@@ -1,6 +1,5 @@
 package com.dogmaticcentral.bookreader.screens
 
-import android.util.Log
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -23,9 +22,9 @@ import com.dogmaticcentral.bookreader.components.ScreenLayout
 import com.dogmaticcentral.bookreader.viewmodel.HomeViewModel
 import com.dogmaticcentral.bookreader.viewmodel.HomeViewModelFactory
 
-// HomeScreen.kt
+// BookScreen.kt
 @Composable
-fun HomeScreen(
+fun BookScreen(
     navController: NavHostController,
     viewModel: HomeViewModel = viewModel(factory = HomeViewModelFactory(LocalBookRepository.current))
 ) {
