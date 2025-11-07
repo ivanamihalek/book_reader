@@ -1,0 +1,47 @@
+I am writing an book reader application in kotlin. 
+It has a Room database where the information about the book titles and chapters is stored.
+The app is storing the audio files in `dirPath` defined as
+```
+        val externalStorageDirectory = android.os.Environment.getExternalStorageDirectory()
+        val audioBooksDIr = android.os.Environment.DIRECTORY_AUDIOBOOKS
+        var dirPath = "$externalStorageDirectory/$audioBooksDIr/BookReader/audio/"
+
+```
+
+I want to add a watcher capability to the app, so that when a new book is stored in the `dirPath` directory, it gets processed and added to the Room database.
+
+The relevant tree strucute looks like this:
+```
+
+├── data
+│   ├── database
+│   │   ├── DAOInterfaces.kt
+│   │   ├── DatabaseClass.kt
+│   │   └── EntityClasses.kt
+│   ├── media
+│   │   ├── MediaPlayerHolder.kt
+│   │   └── MediaStoreUtils.kt
+│   └── Repository.kt
+├── MainActivity.kt
+├── navigation
+│   ├── AdminNavigation.kt
+│   └── AppNavigation.kt
+├── screens
+│   ├── AdminScreen.kt
+│   ├── BookScreen.kt
+│   ├── ChaptersScreen.kt
+│   ├── ErrorScreen.kt
+│   ├── LoadingScreen.kt
+│   └── PlayerScreen.kt
+
+
+```
+The processing of the new book involves unzipping the content in a temporary directory, parsing a file called NCC.HTML to find the book title and the author, creating a new directory using conventional name containing the author name and the book title, renaming the chapter mp3s and adding the information to the Room database.
+
+Please help with the following:
+d
+1) Suggest an expected or standard file to put the watcher functionality in, so that the user does not have to restart the application for the new file to be detected and processed.
+
+2) Suggest the development steps so that each step can be teted individually before moving on to the next one.
+
+
