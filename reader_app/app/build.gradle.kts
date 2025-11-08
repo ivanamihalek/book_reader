@@ -50,6 +50,8 @@ android {
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")
     }
+
+
 }
 
 dependencies {
@@ -67,6 +69,7 @@ dependencies {
     // Room dependencies from catalog
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.rules)
     ksp(libs.androidx.room.compiler)
 
     // Optional: Room paging support
@@ -87,6 +90,10 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.bundles.android.test)
+
+    // debugging
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
 }

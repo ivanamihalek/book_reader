@@ -1,14 +1,11 @@
-
-package com.yourpackage.data.media
+package com.dogmaticcentral.bookreader.data.media
 
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.provider.MediaStore
-import java.io.File
 
 /**
  * Centralized storage path management for audio book files.
@@ -111,24 +108,14 @@ object StoragePaths {
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
         }
+        // Use app-scoped volume instead of the legacy external shared URI
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+       } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+       }
 
-        return contentResolver.insert(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            values
-        )
-    }
-
-    /**
-     * Get legacy absolute file path (for Android < 10)
-     * @param bookDirectoryName Sanitized book directory name
-     * @param fileName Audio file name
-     * @return Absolute file path string
-     */
-    @Suppress("DEPRECATION")
-    fun getLegacyAbsolutePath(bookDirectoryName: String, fileName: String): String {
-        val externalStorage = Environment.getExternalStorageDirectory()
-        val audioBooksDir = Environment.DIRECTORY_AUDIOBOOKS
-        return "$externalStorage/$audioBooksDir/$APP_NAME/$AUDIO_SUBFOLDER/$bookDirectoryName/$fileName"
+       return contentResolver.insert(collection, values)
     }
 
 
@@ -141,30 +128,19 @@ object StoragePaths {
         bookDirectoryName: String,
         fileName: String
     ): AudioFileLocation {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Use MediaStore for Android 10+
-            val uri = queryAudioFileUri(
-                context.contentResolver,
-                bookDirectoryName,
-                fileName
-            )
-            if (uri != null) {
-                AudioFileLocation.MediaStoreUri(uri)
-            } else {
-                AudioFileLocation.NotFound
-            }
+        val uri = queryAudioFileUri(
+            context.contentResolver,
+            bookDirectoryName,
+            fileName
+        )
+        return if (uri == null) {
+            AudioFileLocation.NotFound
+
         } else {
-            // Use legacy file path for older versions
-            @Suppress("DEPRECATION")
-            val path = getLegacyAbsolutePath(bookDirectoryName, fileName)
-            val file = File(path)
-            if (file.exists()) {
-                AudioFileLocation.LegacyPath(path)
-            } else {
-                AudioFileLocation.NotFound
-            }
+            AudioFileLocation.MediaStoreUri(uri)
         }
     }
+
 }
 
 /**
@@ -187,15 +163,16 @@ sealed class AudioFileLocation {
 fun String.toCamelCaseDirectory(): String {
     return this
         .trim()
+        .replace(Regex("[^a-zA-Z0-9]+"), " ")
         .split(Regex("\\s+")) // Split on whitespace
         .filter { it.isNotEmpty() }
         .mapIndexed { index, word ->
-            val cleaned = word.replace(Regex("[^a-zA-Z0-9]"), "")
-            if (cleaned.isEmpty()) return@mapIndexed ""
+
+            if (word.isEmpty()) return@mapIndexed ""
             if (index == 0) {
-                cleaned.lowercase()
+                word.lowercase()
             } else {
-                cleaned.replaceFirstChar { it.uppercase() }
+                word.replaceFirstChar { it.uppercase() }
             }
         }
         .joinToString("")

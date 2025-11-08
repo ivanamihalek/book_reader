@@ -1,7 +1,5 @@
 package com.dogmaticcentral.bookreader.data.media
 
-import com.yourpackage.data.media.StoragePaths
-import com.yourpackage.data.media.toCamelCaseDirectory
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -63,18 +61,6 @@ class StoragePathsTest {
         )
     }
 
-    @Test
-    fun `getLegacyAbsolutePath contains all path components`() {
-        val bookDir = "testBook"
-        val fileName = "test.mp3"
-        val path = StoragePaths.getLegacyAbsolutePath(bookDir, fileName)
-
-        assertTrue(path.contains("Audiobooks"))
-        assertTrue(path.contains("BookReader"))
-        assertTrue(path.contains("audio"))
-        assertTrue(path.contains("testBook"))
-        assertTrue(path.contains("test.mp3"))
-    }
 
     @Test
     fun `toCamelCaseDirectory converts simple titles`() {

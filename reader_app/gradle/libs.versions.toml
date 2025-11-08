@@ -15,6 +15,10 @@ navigationComposeJvmstubs = "2.9.0"
 room = "2.6.1"
 ksp = "2.0.21-1.0.28"
 coroutines = "1.7.3"
+rules = "1.7.0"
+androidxTest = "1.5.2"
+androidxTestExt = "1.1.5"
+uiAutomator = "2.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -44,6 +48,25 @@ androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = 
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 androidx-room-paging = { group = "androidx.room", name = "room-paging", version.ref = "room" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+androidx-rules = { group = "androidx.test", name = "rules", version.ref = "rules" }
+
+
+# Testing libraries
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTest" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTest" }
+androidx-test-rules = { group = "androidx.test", name = "rules", version.ref = "androidxTest" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExt" }
+androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiAutomator" }
+
+
+[bundles]
+android-test = [
+    "androidx-test-core",
+    "androidx-test-runner",
+    "androidx-test-rules",
+    "androidx-test-ext-junit",
+    "androidx-test-uiautomator"
+]
 
 
 [plugins]
