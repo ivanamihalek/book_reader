@@ -6,6 +6,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import java.util.regex.Pattern
 
 /**
  * Centralized storage path management for audio book files.
@@ -22,6 +23,15 @@ object StoragePaths {
      * Used with MediaStore.Audio.Media.RELATIVE_PATH
      */
     const val RELATIVE_PATH = "Audiobooks/$APP_NAME/$AUDIO_SUBFOLDER/"
+
+    // A single source of truth for the correct MediaStore collection URI ---
+    /**
+     * Gets the appropriate MediaStore collection URI for audio files.
+     * Uses the modern volume-specific URI on Android Q+ and falls back to the legacy URI.
+     */
+    private val collectionUri: Uri get() =
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+
 
     /**
      * Builds the book-specific relative path
@@ -67,7 +77,7 @@ object StoragePaths {
         val selectionArgs = arrayOf(fileName, relativePath)
 
         return contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            collectionUri,
             projection,
             selection,
             selectionArgs,
@@ -77,7 +87,7 @@ object StoragePaths {
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                 val id = cursor.getLong(idColumn)
                 Uri.withAppendedPath(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    collectionUri,
                     id.toString()
                 )
             } else {
@@ -104,18 +114,10 @@ object StoragePaths {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
             put(MediaStore.Audio.Media.RELATIVE_PATH, getBookRelativePath(bookDirectoryName))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Audio.Media.IS_PENDING, 1)
-            }
+            put(MediaStore.Audio.Media.IS_PENDING, 1)
         }
         // Use app-scoped volume instead of the legacy external shared URI
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-       } else {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-       }
-
-       return contentResolver.insert(collection, values)
+        return contentResolver.insert(collectionUri, values)
     }
 
 
@@ -160,21 +162,12 @@ sealed class AudioFileLocation {
 /**
  * Extension function to convert book title to a safe camelCase directory name
  */
-fun String.toCamelCaseDirectory(): String {
-    return this
-        .trim()
-        .replace(Regex("[^a-zA-Z0-9]+"), " ")
-        .split(Regex("\\s+")) // Split on whitespace
-        .filter { it.isNotEmpty() }
-        .mapIndexed { index, word ->
+fun String?.toCamelCase(): String {
+    if (this.isNullOrBlank()) return "unknown"
+    val cleanedInstr = Pattern.compile("\\W+").matcher(this).replaceAll(" ").trim()
+    if (cleanedInstr.isBlank()) return "unknown"
+    val tokens = cleanedInstr.lowercase().split("\\s+".toRegex())
+    val tokensCamelCased = listOf(tokens.first()) + tokens.drop(1).map { it.replaceFirstChar { char -> char.uppercaseChar() } }
+    return tokensCamelCased.joinToString(separator = "")
 
-            if (word.isEmpty()) return@mapIndexed ""
-            if (index == 0) {
-                word.lowercase()
-            } else {
-                word.replaceFirstChar { it.uppercase() }
-            }
-        }
-        .joinToString("")
-        .takeIf { it.isNotEmpty() } ?: "unknown"
 }

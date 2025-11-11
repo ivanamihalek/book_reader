@@ -1,5 +1,6 @@
 package com.dogmaticcentral.bookreader.data.media
 
+
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -64,44 +65,44 @@ class StoragePathsTest {
 
     @Test
     fun `toCamelCaseDirectory converts simple titles`() {
-        assertEquals("harryPotter", "Harry Potter".toCamelCaseDirectory())
-        assertEquals("theHobbit", "The Hobbit".toCamelCaseDirectory())
-        assertEquals("book", "Book".toCamelCaseDirectory())
+        assertEquals("harryPotter", "Harry Potter".toCamelCase())
+        assertEquals("theHobbit", "The Hobbit".toCamelCase())
+        assertEquals("book", "Book".toCamelCase())
     }
 
     @Test
     fun `toCamelCaseDirectory handles single word`() {
-        assertEquals("dune", "Dune".toCamelCaseDirectory())
-        assertEquals("dune", "DUNE".toCamelCaseDirectory())
+        assertEquals("dune", "Dune".toCamelCase())
+        assertEquals("dune", "DUNE".toCamelCase())
     }
 
     @Test
     fun `toCamelCaseDirectory removes special characters`() {
-        assertEquals("harryPotter", "Harry Potter!!!".toCamelCaseDirectory())
-        assertEquals("bookTitle", "Book-Title".toCamelCaseDirectory())
-        assertEquals("testBook", "Test@Book#".toCamelCaseDirectory())
+        assertEquals("harryPotter", "Harry Potter!!!".toCamelCase())
+        assertEquals("bookTitle", "Book-Title".toCamelCase())
+        assertEquals("testBook", "Test@Book#".toCamelCase())
     }
 
     @Test
     fun `toCamelCaseDirectory handles multiple spaces`() {
-        assertEquals("theBookTitle", "The   Book    Title".toCamelCaseDirectory())
+        assertEquals("theBookTitle", "The   Book    Title".toCamelCase())
     }
 
     @Test
     fun `toCamelCaseDirectory handles numbers`() {
-        assertEquals("1984", "1984".toCamelCaseDirectory())
-        assertEquals("book1Chapter2", "Book 1 Chapter 2".toCamelCaseDirectory())
+        assertEquals("1984", "1984".toCamelCase())
+        assertEquals("book1Chapter2", "Book 1 Chapter 2".toCamelCase())
     }
 
     @Test
     fun `toCamelCaseDirectory handles empty and whitespace`() {
-        assertEquals("unknown", "".toCamelCaseDirectory())
-        assertEquals("unknown", "   ".toCamelCaseDirectory())
+        assertEquals("unknown", "".toCamelCase())
+        assertEquals("unknown", "   ".toCamelCase())
     }
 
     @Test
     fun `toCamelCaseDirectory handles only special characters`() {
-        assertEquals("unknown", "!!!@@@###".toCamelCaseDirectory())
+        assertEquals("unknown", "!!!@@@###".toCamelCase())
     }
 
     @Test

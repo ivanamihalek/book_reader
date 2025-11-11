@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.media.MediaMetadataRetriever
 import com.dogmaticcentral.bookreader.data.database.*
+import com.dogmaticcentral.bookreader.data.media.StoragePaths
 import com.dogmaticcentral.bookreader.data.media.getAudioContentUriFromFilePath
 import com.dogmaticcentral.bookreader.data.media.saveMp3ToMediaStore
 import kotlinx.coroutines.flow.Flow
@@ -101,28 +102,22 @@ class BookRepository(
 
 }
 
-// Extension functions and utility functions
-fun String.toCamelCaseDirectory(): String {
-    return this.split(" ")
-        .joinToString("") { word ->
-            word.replaceFirstChar {
-                if (it.isLowerCase()) it.titlecase()
-                else it.toString()
-            }
-        }
-        .replace("[^a-zA-Z0-9]".toRegex(), "")
-}
-
 suspend fun getAudioFilePath(repository: BookRepository, bookId: Int, chapterId: Int): String? {
     val book = repository.getBookById(bookId)
     val chapter = repository.getChapterById(chapterId)
     var filePath: String? = null
+
     if (book != null && chapter != null) {
-        val directoryName = book.title.toCamelCaseDirectory()
+        // TODO I am here
+        val directoryName = book.title.toCamelCase()
         val externalStorageDirectory = android.os.Environment.getExternalStorageDirectory()
         val audioBooksDIr = android.os.Environment.DIRECTORY_AUDIOBOOKS
 
-        filePath = "$externalStorageDirectory/$audioBooksDIr/BookReader/audio/$directoryName/${chapter.fileName}"
+        filePath = StoragePaths.getAudioFileLocation(
+            context,
+            directoryName,
+            chapter.fileName
+        )
     }
 
     return filePath
