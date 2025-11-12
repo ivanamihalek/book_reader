@@ -130,6 +130,7 @@ suspend fun getAudioContentUri(
           .getBookById(bookId)   // Book?
           ?.title                // String?
           ?.toCamelCase()        // String?
+          ?: "Unknown Title"    // default via Elvis (?:)
     // TODO I am here - where  do Ige the contentResolver from?
     var uri: Uri? = StoragePaths.queryAudioFileUri(bookTitle)
     if (uri == null) {
