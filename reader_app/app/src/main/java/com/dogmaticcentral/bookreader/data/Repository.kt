@@ -7,6 +7,7 @@ import com.dogmaticcentral.bookreader.data.database.*
 import com.dogmaticcentral.bookreader.data.media.StoragePaths
 import com.dogmaticcentral.bookreader.data.media.getAudioContentUriFromFilePath
 import com.dogmaticcentral.bookreader.data.media.saveMp3ToMediaStore
+import com.dogmaticcentral.bookreader.data.media.toCamelCase
 import kotlinx.coroutines.flow.Flow
 
 class BookRepository(
@@ -102,26 +103,22 @@ class BookRepository(
 
 }
 
-suspend fun getAudioFilePath(repository: BookRepository, bookId: Int, chapterId: Int): String? {
-    val book = repository.getBookById(bookId)
-    val chapter = repository.getChapterById(chapterId)
-    var filePath: String? = null
-
-    if (book != null && chapter != null) {
-        // TODO I am here
-        val directoryName = book.title.toCamelCase()
-        val externalStorageDirectory = android.os.Environment.getExternalStorageDirectory()
-        val audioBooksDIr = android.os.Environment.DIRECTORY_AUDIOBOOKS
-
-        filePath = StoragePaths.getAudioFileLocation(
-            context,
-            directoryName,
-            chapter.fileName
-        )
-    }
-
-    return filePath
-}
+//suspend fun getAudioFilePath(repository: BookRepository, bookId: Int, chapterId: Int): String? {
+//    val book = repository.getBookById(bookId)
+//    val chapter = repository.getChapterById(chapterId)
+//    var filePath: String? = null
+//
+//    if (book != null && chapter != null) {
+//        // TODO I am here
+//         filePath = StoragePaths.getAudioFileLocation(
+//            context,
+//            book.title,
+//            chapter.fileName
+//        )
+//    }
+//
+//    return filePath
+//}
 
 suspend fun getAudioContentUri(
     context: Context,
@@ -129,8 +126,12 @@ suspend fun getAudioContentUri(
     bookId: Int,
     chapterId: Int
 ): Uri? {
-    val filePath = getAudioFilePath(repository, bookId, chapterId) ?: return null
-    var uri: Uri? = getAudioContentUriFromFilePath(context, filePath)
+    val bookTitle: String? = repository
+          .getBookById(bookId)   // Book?
+          ?.title                // String?
+          ?.toCamelCase()        // String?
+    // TODO I am here - where  do Ige the contentResolver from?
+    var uri: Uri? = StoragePaths.queryAudioFileUri(bookTitle)
     if (uri == null) {
         uri = saveMp3ToMediaStore(context, filePath)
     }
