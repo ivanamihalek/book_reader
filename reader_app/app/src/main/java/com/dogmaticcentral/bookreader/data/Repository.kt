@@ -5,8 +5,6 @@ import android.net.Uri
 import android.media.MediaMetadataRetriever
 import com.dogmaticcentral.bookreader.data.database.*
 import com.dogmaticcentral.bookreader.data.media.StoragePaths
-import com.dogmaticcentral.bookreader.data.media.getAudioContentUriFromFilePath
-import com.dogmaticcentral.bookreader.data.media.saveMp3ToMediaStore
 import com.dogmaticcentral.bookreader.data.media.toCamelCase
 import kotlinx.coroutines.flow.Flow
 
@@ -103,22 +101,6 @@ class BookRepository(
 
 }
 
-//suspend fun getAudioFilePath(repository: BookRepository, bookId: Int, chapterId: Int): String? {
-//    val book = repository.getBookById(bookId)
-//    val chapter = repository.getChapterById(chapterId)
-//    var filePath: String? = null
-//
-//    if (book != null && chapter != null) {
-//        // TODO I am here
-//         filePath = StoragePaths.getAudioFileLocation(
-//            context,
-//            book.title,
-//            chapter.fileName
-//        )
-//    }
-//
-//    return filePath
-//}
 
 suspend fun getAudioContentUri(
     context: Context,
@@ -126,15 +108,20 @@ suspend fun getAudioContentUri(
     bookId: Int,
     chapterId: Int
 ): Uri? {
-    val bookTitle: String? = repository
+    val bookTitle: String = repository
           .getBookById(bookId)   // Book?
           ?.title                // String?
           ?.toCamelCase()        // String?
-          ?: "Unknown Title"    // default via Elvis (?:)
-    // TODO I am here - where  do Ige the contentResolver from?
-    var uri: Uri? = StoragePaths.queryAudioFileUri(bookTitle)
+          ?: "unknownBook"    // default via Elvis (?:)
+    val fileName = repository.getChapterById(chapterId)
+        ?.fileName
+        ?:"unknownChapter"
+    var uri: Uri? = StoragePaths.queryAudioFileUri(context.contentResolver,
+                     bookTitle, fileName )
     if (uri == null) {
-        uri = saveMp3ToMediaStore(context, filePath)
+
+        uri = StoragePaths.createAudioFileUri(context.contentResolver,
+                     bookTitle, fileName )
     }
     return uri
 }
