@@ -13,7 +13,7 @@ DB_NAME = 'bookreader.db'
 # Setup global  Peewee database proxy - Peewee is so lame
 # I don't want to instantiate the db here before checking and
 # informing the user that something may be wrong
-global_db_proxy = Proxy()
+from settings import global_db_proxy
 
 
 def parse_directory_name(directory_path: str) -> Tuple[str, str]:
