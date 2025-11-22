@@ -38,6 +38,7 @@ class MediaPlayerHolder(private val context: Context) {
                 return
             }
             mediaPlayer.reset()
+            Log.d("MediaPlayerHolder", "audioUri: $audioUri" )
             mediaPlayer.setDataSource(context, audioUri)
             mediaPlayer.prepareAsync()
             mediaPlayer.setOnPreparedListener {

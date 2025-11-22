@@ -4,8 +4,8 @@ import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import android.provider.MediaStore
+import android.util.Log
 import java.util.regex.Pattern
 
 /**
@@ -30,7 +30,7 @@ object StoragePaths {
      * Uses the modern volume-specific URI on Android Q+ and falls back to the legacy URI.
      */
     private val collectionUri: Uri get() =
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
 
 
     /**
@@ -110,16 +110,41 @@ object StoragePaths {
         fileName: String,
         mimeType: String = "audio/mpeg"
     ): Uri? {
+
+        Log.d("StoragePaths.kt",  getBookRelativePath(bookDirectoryName))
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
-            put(MediaStore.Audio.Media.RELATIVE_PATH, getBookRelativePath(bookDirectoryName))
+            put(MediaStore.Audio.Media.RELATIVE_PATH, getBookRelativePath(bookDirectoryName) )
             put(MediaStore.Audio.Media.IS_PENDING, 1)
         }
         // Use app-scoped volume instead of the legacy external shared URI
-        return contentResolver.insert(collectionUri, values)
+        val uri = contentResolver.insert(collectionUri, values)
+        // Validation Logic: Ensure the physical file exists/is accessible
+        return if (uri != null && isFileAccessible(contentResolver, uri)) {
+            uri
+        } else {
+            // If uri exists but file doesn't, delete the empty DB row and return null
+            if (uri != null) {
+                try { contentResolver.delete(uri, null, null) }
+                catch (e: Exception) { /* Ignore cleanup error */ }
+            }
+            null
+        }
     }
 
+    /**
+     * Helper to verify a URI points to a valid, accessible physical file.
+     */
+    private fun isFileAccessible(contentResolver: ContentResolver, uri: Uri): Boolean {
+        // Attempt to open the file. If it doesn't exist physically,
+        // this throws FileNotFoundException.
+
+        return contentResolver.openFileDescriptor(uri, "r")?.use {
+                true // File opened successfully
+            } ?: false
+
+    }
 
     /**
      * Get the appropriate audio file location based on Android version
@@ -160,14 +185,14 @@ sealed class AudioFileLocation {
 }
 
 /**
- * Extension function to convert book title to a safe camelCase directory name
+ * Extension function to convert book title to a safe PascalCase directory name
  */
-fun String?.toCamelCase(): String {
+fun String?.toPascalCase(): String {
     if (this.isNullOrBlank()) return "unknown"
     val cleanedInstr = Pattern.compile("\\W+").matcher(this).replaceAll(" ").trim()
     if (cleanedInstr.isBlank()) return "unknown"
     val tokens = cleanedInstr.lowercase().split("\\s+".toRegex())
-    val tokensCamelCased = listOf(tokens.first()) + tokens.drop(1).map { it.replaceFirstChar { char -> char.uppercaseChar() } }
+    val tokensCamelCased = tokens.map { it.replaceFirstChar { char -> char.uppercaseChar() } }
     return tokensCamelCased.joinToString(separator = "")
 
 }

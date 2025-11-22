@@ -2,10 +2,10 @@ package com.dogmaticcentral.bookreader.data
 
 import android.content.Context
 import android.net.Uri
-import android.media.MediaMetadataRetriever
+import android.util.Log
 import com.dogmaticcentral.bookreader.data.database.*
 import com.dogmaticcentral.bookreader.data.media.StoragePaths
-import com.dogmaticcentral.bookreader.data.media.toCamelCase
+import com.dogmaticcentral.bookreader.data.media.toPascalCase
 import kotlinx.coroutines.flow.Flow
 
 class BookRepository(
@@ -111,17 +111,19 @@ suspend fun getAudioContentUri(
     val bookTitle: String = repository
           .getBookById(bookId)   // Book?
           ?.title                // String?
-          ?.toCamelCase()        // String?
+          ?.toPascalCase()        // String?
           ?: "unknownBook"    // default via Elvis (?:)
     val fileName = repository.getChapterById(chapterId)
         ?.fileName
         ?:"unknownChapter"
     var uri: Uri? = StoragePaths.queryAudioFileUri(context.contentResolver,
                      bookTitle, fileName )
+    Log.d("getAudioContentUr", "uri 1: $uri")
     if (uri == null) {
 
         uri = StoragePaths.createAudioFileUri(context.contentResolver,
                      bookTitle, fileName )
     }
+    Log.d("getAudioContentUr", "uri 2: $uri")
     return uri
 }

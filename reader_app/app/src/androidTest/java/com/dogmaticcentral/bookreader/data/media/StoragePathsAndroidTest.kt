@@ -84,7 +84,7 @@ class StoragePathsTest {
 
     @Test
     fun createAudioFileUri_succeedsAndHasCorrectMetadata() {
-        val bookDir = "createTestBook"
+        val bookDir = "CreateTestBook"
         val fileName = "chapter1.mp3"
 
         // Act

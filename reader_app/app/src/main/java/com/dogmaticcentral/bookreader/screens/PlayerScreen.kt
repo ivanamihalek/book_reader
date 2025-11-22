@@ -222,6 +222,7 @@ fun PlayerScreen(
                         playbackState = playbackState,
                         onPlayPause = {
                             if (playbackState == PlaybackState.IDLE) {
+                                Log.d("PLayScreen", "it: $it")
                                 playerViewModel.playAudio(it)
                             } else {
                                 playerViewModel.togglePlayPause()
