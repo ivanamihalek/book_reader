@@ -4,8 +4,11 @@ import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import java.io.File
+import java.io.FileInputStream
 import java.util.regex.Pattern
 
 /**
@@ -111,7 +114,41 @@ object StoragePaths {
         mimeType: String = "audio/mpeg"
     ): Uri? {
 
-        Log.d("StoragePaths.kt",  getBookRelativePath(bookDirectoryName))
+        // 1. Construct the paths
+        val relativePath = getBookRelativePath(bookDirectoryName)
+        val externalRoot = Environment.getExternalStorageDirectory()
+
+        // The directory object
+        val directory = File(externalRoot, relativePath)
+
+        // The actual physical file object we want to check
+        val targetFile = File(directory, fileName)
+
+        // 2. CHECK: Directory must exist
+        if (!directory.exists() || !directory.isDirectory) {
+            Log.e("StoragePaths.kt", "Directory does not exist: $relativePath")
+            return null
+        }
+
+        // 3. CHECK: File must exist, be non-empty, and be a valid MP3
+        if (!targetFile.exists()) {
+            Log.e("StoragePaths.kt", "Target file does not exist: $fileName")
+            return null
+        }
+
+        if (targetFile.length() <= 0) {
+            Log.e("StoragePaths.kt", "Target file is empty.")
+            return null
+        }
+
+        if (!isValidMp3File(targetFile)) {
+            Log.e("StoragePaths.kt", "Target file is not a valid MP3.")
+            return null
+        }
+
+        // 4. If we pass checks, INSERT into ContentResolver
+        Log.d("StoragePaths.kt", "Validation passed. Creating URI for: $relativePath")
+
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
@@ -120,6 +157,7 @@ object StoragePaths {
         }
         // Use app-scoped volume instead of the legacy external shared URI
         val uri = contentResolver.insert(collectionUri, values)
+
         // Validation Logic: Ensure the physical file exists/is accessible
         return if (uri != null && isFileAccessible(contentResolver, uri)) {
             uri
@@ -145,7 +183,39 @@ object StoragePaths {
             } ?: false
 
     }
+    /**
+     * Helper to validate MP3 headers using standard Java IO
+     */
+    private fun isValidMp3File(file: File): Boolean {
+        return try {
+            FileInputStream(file).use { fis ->
+                val header = ByteArray(3)
+                // If we can't read 3 bytes, it's not valid
+                if (fis.read(header) != 3) return false
 
+                // Check for "ID3" tag (Hex: 49 44 33)
+                if (header[0] == 0x49.toByte() &&
+                    header[1] == 0x44.toByte() &&
+                    header[2] == 0x33.toByte()) {
+                    return true
+                }
+
+                // Check for MPEG Frame Sync (First 11 bits set to 1)
+                // Byte 0: 0xFF
+                // Byte 1: 0xE0 (top 3 bits set)
+                val b0 = header[0].toInt() and 0xFF
+                val b1 = header[1].toInt() and 0xFF
+                if (b0 == 0xFF && (b1 and 0xE0) == 0xE0) {
+                    return true
+                }
+
+                return false
+            }
+        } catch (e: Exception) {
+            Log.e("StoragePaths.kt", "Error reading file header", e)
+            false
+        }
+    }
     /**
      * Get the appropriate audio file location based on Android version
      * Returns either a MediaStore Uri (Android 10+) or legacy file path

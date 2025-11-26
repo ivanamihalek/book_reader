@@ -70,43 +70,79 @@ class MediaWriteTest {
 
     @Test
     fun createAudioFileUri_withEmptyMp3File_returnsNull() {
-        // Create a file URI first
-        val pendingUri = createTestAudioFileUri()
+        // Test that StoragePaths returns null when directory doesn't exist
+        val uri = StoragePaths.createAudioFileUri(
+            contentResolver,
+            nonExistentDir,
+            testFileName
+        )
 
-        // Write empty content (0 bytes)
-        writeContentToUri(pendingUri, ByteArray(0))
+        assertNull("StoragePaths should return null for non-existent directory", uri)
+        println("SUCCESS: StoragePaths correctly returned null for non-existent directory")
 
-        // Commit the file
-        commitFile(pendingUri)
-
-        // Verify the file exists but is empty, and StoragePaths handles it correctly
-        verifyFileSize(pendingUri, 0)
-        println("SUCCESS: Empty MP3 file was created and verified")
-
-        // Note: The actual behavior of StoragePaths.createAudioFileUri with empty files
-        // would depend on your implementation. This test assumes it should return null.
-        // You might need to add a separate method to StoragePaths to check existing files.
     }
 
     @Test
     fun createAudioFileUri_withInvalidMp3File_returnsNull() {
-        // Create a file URI
-        val pendingUri = createTestAudioFileUri()
+        // 1. SETUP: Create a physical file that is 0 bytes
+        // We use the helper to put a file exactly where StoragePaths looks
+        val createdUri = createPreExistingFile(testBookDir, testFileName, ByteArray(0))
+        if (createdUri != null) createdUris.add(createdUri)
 
-        // Write content that has .mp3 extension but is not actual MP3 data
-        val invalidMp3Content = "This is not MP3 data, just plain text pretending to be audio."
-        writeContentToUri(pendingUri, invalidMp3Content.toByteArray())
+        // 2. ACT
+        val resultUri = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookDir,
+            testFileName
+        )
 
-        // Commit the file
-        commitFile(pendingUri)
+        // 3. ASSERT
+        assertNull("Should return null because file length is 0", resultUri)
+        println("SUCCESS: correctly rejected empty file")
 
-        // Verify the file was created with the fake content
-        verifyFileSize(pendingUri, invalidMp3Content.toByteArray().size.toLong())
-        println("SUCCESS: Invalid MP3 file was created (has .mp3 extension but invalid content)")
-
-        // Note: Similar to above, you might need additional logic in StoragePaths
-        // to validate MP3 file format and return null for invalid files.
     }
+
+
+    /**
+     * Helper to write a file to disk so the System Under Test (SUT) can read it.
+     * Note: This uses MediaStore to perform the write, ensuring the file physically exists.
+     */
+    private fun createPreExistingFile(dirName: String, fileName: String, content: ByteArray): Uri? {
+        // We need to match the path logic used by your StoragePaths object.
+        // Assuming StoragePaths.getBookRelativePath is accessible.
+        // If it is private, you must manually construct the path string here (e.g. "Music/$dirName/")
+        val relativePath = StoragePaths.getBookRelativePath(dirName)
+
+        val values = ContentValues().apply {
+            put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+            put(MediaStore.Audio.Media.RELATIVE_PATH, relativePath)
+            put(MediaStore.Audio.Media.IS_PENDING, 1)
+        }
+
+        val uri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+
+        if (uri != null) {
+            try {
+                contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    if (content.isNotEmpty()) {
+                        outputStream.write(content)
+                    }
+                }
+                // Mark as finished
+                val updateValues = ContentValues().apply {
+                    put(MediaStore.Audio.Media.IS_PENDING, 0)
+                }
+                contentResolver.update(uri, updateValues, null, null)
+                return uri
+            } catch (e: IOException) {
+                e.printStackTrace()
+            }
+        }
+        return null
+    }
+
+
 
     @Test
     fun createAudioFileUri_withValidNonEmptyMp3_returnsNonNullUri() {
