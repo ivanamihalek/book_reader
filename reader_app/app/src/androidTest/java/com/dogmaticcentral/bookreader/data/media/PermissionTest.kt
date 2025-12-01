@@ -1,4 +1,4 @@
-package com.dogmaticcentral.bookreader // Use your app's package name
+package com.dogmaticcentral.bookreader.data.media // Use your app's package name
 
 import android.Manifest
 import android.provider.MediaStore

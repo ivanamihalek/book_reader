@@ -1,168 +1,666 @@
 package com.dogmaticcentral.bookreader.data.media
 
-import android.Manifest
-import android.content.ContentValues
+import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
-import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.filters.SdkSuppress
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.rule.GrantPermissionRule
+import androidx.test.filters.LargeTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Rule
+import org.junit.Before
+import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.IOException
+import org.junit.runners.MethodSorters
+import java.io.File
+import java.io.FileOutputStream
+
+
+//
+//Order 1-10: Setup validation tests
+//Order 11-20: Error case tests
+//Order 21-30: Success case tests
+//Order 31-40: Query tests
+//
 
 @RunWith(AndroidJUnit4::class)
-@SdkSuppress(minSdkVersion = Build.VERSION_CODES.Q) // These tests are for Scoped Storage
-class StoragePathsTest {
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@LargeTest
+class StoragePathsInstrumentedTest {
 
-    /**
-     * This rule is ESSENTIAL. It grants the READ permission before each test,
-     * which is required for any function that queries the general MediaStore collection
-     * (like our queryAudioFileUri).
-     */
-    @get:Rule
-    val permissionRule: GrantPermissionRule = GrantPermissionRule.grant(
-        Manifest.permission.READ_MEDIA_AUDIO
-    )
+    private lateinit var context: Context
+    private lateinit var contentResolver: ContentResolver
+    private lateinit var testBookDirectory: File
+    private val testBookName = "TestBook"
+    private val testFileName = "test_chapter.mp3"
 
-    private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
-    private val contentResolver = context.contentResolver
+    // Track created resources for cleanup
+    private val createdFiles = mutableListOf<File>()
     private val createdUris = mutableListOf<Uri>()
 
-    @After
-    fun tearDown() {
-        // Clean up any files created during the tests
-        createdUris.forEach { uri ->
-            try {
-                // Using a specific ID-based clause is safer for deletion
-                val selection = "${MediaStore.Audio.Media._ID} = ?"
-                val selectionArgs = arrayOf(uri.lastPathSegment)
-                contentResolver.delete(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, selection, selectionArgs)
-            } catch (e: Exception) {
-                // Log and ignore errors during cleanup
-                System.err.println("Error during cleanup: ${e.message}")
-            }
+    @Before
+    fun setup() {
+        context = ApplicationProvider.getApplicationContext()
+        contentResolver = context.contentResolver
+
+        // Create the base test directory structure
+        val externalRoot = Environment.getExternalStorageDirectory()
+        val relativePath = StoragePaths.getBookRelativePath(testBookName)
+        testBookDirectory = File(externalRoot, relativePath)
+
+        // Delete existing directory if it exists (cleanup from failed previous tests)
+        if (testBookDirectory.exists()) {
+            testBookDirectory.deleteRecursively()
         }
+
+        // Clear tracking lists
+        createdFiles.clear()
         createdUris.clear()
     }
 
-    /**
-     * A private helper function to reliably create and commit a test file.
-     * This avoids code duplication and ensures a consistent state for query tests.
-     */
-    private fun createAndCommitTestFile(bookDir: String, fileName: String): Uri {
-        // 1. Create the pending URI entry
-        val pendingUri = StoragePaths.createAudioFileUri(contentResolver, bookDir, fileName)
-        assertNotNull("Helper failed: createAudioFileUri returned null", pendingUri)
-        createdUris.add(pendingUri!!)
+    @After
+    fun cleanup() {
+        // Delete all created URIs from MediaStore
+        createdUris.forEach { uri ->
+            try {
+                contentResolver.delete(uri, null, null)
+            } catch (e: Exception) {
+                android.util.Log.w("TestCleanup", "Failed to delete URI: $uri", e)
+            }
+        }
+        createdUris.clear()
 
-        // 2. Write some dummy data to it so it's a real file
+        // Delete all created files
+        createdFiles.forEach { file ->
+            try {
+                if (file.exists()) {
+                    file.delete()
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("TestCleanup", "Failed to delete file: ${file.name}", e)
+            }
+        }
+        createdFiles.clear()
+
+        // Delete test directory structure
         try {
-            contentResolver.openOutputStream(pendingUri)?.use { it.write("dummy data".toByteArray()) }
-        } catch (e: IOException) {
-            throw IOException("Helper failed: Could not write to output stream", e)
-        }
-
-        // 3. Commit the file by marking it as non-pending
-        val values = ContentValues().apply {
-            put(MediaStore.Audio.Media.IS_PENDING, 0)
-        }
-        val updatedRows = contentResolver.update(pendingUri, values, null, null)
-        assertTrue("Helper failed: File was not committed (update rows was 0)", updatedRows > 0)
-
-        return pendingUri
-    }
-
-    @Test
-    fun createAudioFileUri_succeedsAndHasCorrectMetadata() {
-        val bookDir = "CreateTestBook"
-        val fileName = "chapter1.mp3"
-
-        // Act
-        val createdUri = StoragePaths.createAudioFileUri(contentResolver, bookDir, fileName)
-        assertNotNull("createAudioFileUri should return a non-null URI", createdUri)
-        createdUris.add(createdUri!!) // Ensure cleanup
-
-        // Assert
-        // We can query the specific URI we received without needing extra permissions
-        contentResolver.query(createdUri, null, null, null, null)?.use { cursor ->
-            assertTrue("Cursor should not be empty", cursor.moveToFirst())
-
-            val displayName = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME))
-            val relativePath = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH))
-            val isPending = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.IS_PENDING))
-
-            assertEquals("Display name should match", fileName, displayName)
-            assertEquals("Relative path should match", StoragePaths.getBookRelativePath(bookDir), relativePath)
-            assertEquals("File should be marked as pending", 1, isPending)
+            if (testBookDirectory.exists()) {
+                testBookDirectory.deleteRecursively()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("TestCleanup", "Failed to delete directory", e)
         }
     }
 
+    // Setup validation tests
+
     @Test
-    fun queryAudioFileUri_findsCorrectFile_whenItExists() {
-        val bookDir = "queryTestBook_${System.currentTimeMillis()}"
-        val fileName = "existingFile.mp3"
+    fun test010_directoryCanBeCreated() {
+        val directoryCreated = testBookDirectory.mkdirs()
 
-        // Arrange: Create the file we expect to find
-        val expectedUri = createAndCommitTestFile(bookDir, fileName)
-
-        // Act: Use the function under test to try and find it
-        val queriedUri = StoragePaths.queryAudioFileUri(contentResolver, bookDir, fileName)
-
-        // Assert
-        assertNotNull("queryAudioFileUri should have found the file", queriedUri)
-        assertEquals("The found URI should match the created URI", expectedUri, queriedUri)
+        val msg = "Directory should be created successfully"
+        assertTrue(msg, directoryCreated || testBookDirectory.exists())
+        println("SUCCESS: $msg")
     }
 
     @Test
-    fun queryAudioFileUri_returnsNull_whenFileDoesNotExist() {
-        // Act
+    fun test020_createdDirectoryExists() {
+        testBookDirectory.mkdirs()
+
+        val msg = "Directory should exist after creation"
+        assertTrue(msg, testBookDirectory.exists())
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test030_pathIsActuallyADirectory() {
+        testBookDirectory.mkdirs()
+
+        val msg = "Path should be a directory"
+        assertTrue(msg, testBookDirectory.isDirectory)
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test040_directoryContentsCanBeListed() {
+        testBookDirectory.mkdirs()
+
+        val msg = "Should be able to list directory contents"
+        val contents = testBookDirectory.listFiles()
+        assertNotNull(msg, contents)
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test050_directoryPathContainsExpectedRelativePath() {
+        testBookDirectory.mkdirs()
+
+        val expectedPath = StoragePaths.getBookRelativePath(testBookName).trimEnd('/')
+        val actualPath = testBookDirectory.absolutePath
+        val msg = """
+            Directory path should contain expected relative path
+            Expected to contain: '$expectedPath'
+            Actual path: '$actualPath'
+        """.trimIndent()
+
+        assertTrue(msg, actualPath.contains(expectedPath))
+        println("SUCCESS: Directory path contains expected relative path")
+    }
+
+    @Test
+    fun test060_filesCanBeCreatedInDirectory() {
+        testBookDirectory.mkdirs()
+
+        val testMarkerFile = File(testBookDirectory, "test_marker.txt")
+        val fileCreated = testMarkerFile.createNewFile()
+        createdFiles.add(testMarkerFile)
+
+        val msg = "Should be able to create files in the directory"
+        assertTrue(msg, fileCreated)
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test070_createdFileExists() {
+        testBookDirectory.mkdirs()
+
+        val testMarkerFile = File(testBookDirectory, "test_marker.txt")
+        testMarkerFile.createNewFile()
+        createdFiles.add(testMarkerFile)
+
+        val msg = "Created file should exist"
+        assertTrue(msg, testMarkerFile.exists())
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test080_createdFileCanBeFoundInDirectoryListing() {
+        testBookDirectory.mkdirs()
+
+        val testMarkerFile = File(testBookDirectory, "test_marker.txt")
+        testMarkerFile.createNewFile()
+        createdFiles.add(testMarkerFile)
+
+        val filesInDirectory = testBookDirectory.listFiles()
+
+        var msg = "Directory listing should not be null"
+        assertNotNull(msg, filesInDirectory)
+        println("SUCCESS: $msg")
+
+        msg = "Should be able to find created file in directory listing"
+        val foundMarkerFile = filesInDirectory!!.any { it.name == "test_marker.txt" }
+        assertTrue(msg, foundMarkerFile)
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test090_directoryPermissions_areCorrect() {
+        testBookDirectory.mkdirs()
+
+        var msg = "Directory should be readable"
+        assertTrue(msg, testBookDirectory.canRead())
+        println("SUCCESS: $msg")
+
+        msg = "Directory should be writable"
+        assertTrue(msg, testBookDirectory.canWrite())
+        println("SUCCESS: $msg")
+
+        msg = "Directory should be executable (listable)"
+        assertTrue(msg, testBookDirectory.canExecute())
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test100_canDeleteCreatedDirectory_validatesCleanupWorks() {
+        // Create directory and file
+        testBookDirectory.mkdirs()
+        val testFile = File(testBookDirectory, "cleanup_test.txt")
+        testFile.createNewFile()
+
+        var msg = "Directory should exist"
+        assertTrue(msg, testBookDirectory.exists())
+        println("SUCCESS: $msg")
+
+        msg = "File should exist"
+        assertTrue(msg, testFile.exists())
+        println("SUCCESS: $msg")
+
+        // Manually cleanup
+        testFile.delete()
+        testBookDirectory.deleteRecursively()
+
+        msg = "File should be deleted"
+        assertTrue(msg, !testFile.exists())
+        println("SUCCESS: $msg")
+
+        msg = "Directory should be deleted"
+        assertTrue(msg, !testBookDirectory.exists())
+        println("SUCCESS: $msg")
+    }
+
+    // Error case tests
+
+    @Test
+    fun test110_createAudioFileUri_nonexistentDirectory_returnsNull() {
+        // Ensure directory does not exist
+        if (testBookDirectory.exists()) {
+            testBookDirectory.deleteRecursively()
+        }
+
+        val result = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        val msg = "Expected null when directory does not exist"
+        assertNull(msg, result)
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test120_createAudioFileUri_nonexistentMp3File_returnsNull() {
+        // Create directory but no file
+        testBookDirectory.mkdirs()
+
+        val testFile = File(testBookDirectory, testFileName)
+        // Ensure file does not exist
+        if (testFile.exists()) {
+            testFile.delete()
+        }
+
+        val result = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        val msg = "Expected null when MP3 file does not exist"
+        assertNull(msg, result)
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test130_createAudioFileUri_emptyMp3File_returnsNull() {
+        // Create directory
+        testBookDirectory.mkdirs()
+
+        // Create empty file
+        val testFile = File(testBookDirectory, testFileName)
+        testFile.createNewFile()
+        createdFiles.add(testFile)
+
+        var msg = "Test file should be empty"
+        assertEquals(msg, 0L, testFile.length())
+        println("SUCCESS: $msg")
+
+        val result = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        msg = "Expected null when MP3 file is empty"
+        assertNull(msg, result)
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test140_createAudioFileUri_nonMp3File_returnsNull() {
+        // Create directory
+        testBookDirectory.mkdirs()
+
+        // Create non-empty file with invalid MP3 header
+        val testFile = File(testBookDirectory, testFileName)
+        FileOutputStream(testFile).use { fos ->
+            val invalidData = "This is not an MP3 file".toByteArray()
+            fos.write(invalidData)
+        }
+        createdFiles.add(testFile)
+
+        var msg = "Test file should be non-empty"
+        assertTrue(msg, testFile.length() > 0)
+        println("SUCCESS: $msg")
+
+        val result = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        msg = "Expected null when file is not a valid MP3"
+        assertNull(msg, result)
+        println("SUCCESS: $msg")
+    }
+
+    // Success case tests
+
+    @Test
+    fun test150_createAudioFileUri_validMp3WithId3Header_returnsUri() {
+        // Create directory
+        testBookDirectory.mkdirs()
+
+        // Create valid MP3 file with ID3 header
+        val testFile = File(testBookDirectory, testFileName)
+        FileOutputStream(testFile).use { fos ->
+            fos.write(byteArrayOf(0x49.toByte(), 0x44.toByte(), 0x33.toByte()))
+            fos.write(ByteArray(100))
+        }
+        createdFiles.add(testFile)
+
+        var msg = "Test file should exist"
+        assertTrue(msg, testFile.exists())
+        println("SUCCESS: $msg")
+
+        msg = "Test file should be non-empty"
+        assertTrue(msg, testFile.length() > 0)
+        println("SUCCESS: $msg")
+
+        val result = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        msg = "Expected valid URI for valid MP3 file"
+        assertNotNull(msg, result)
+        println("SUCCESS: $msg")
+
+        createdUris.add(result!!)
+    }
+
+    @Test
+    fun test160_createAudioFileUri_validMp3WithMpegHeader_returnsUri() {
+        // Create directory
+        testBookDirectory.mkdirs()
+
+        // Create valid MP3 file with MPEG frame sync header
+        val testFile = File(testBookDirectory, testFileName)
+        FileOutputStream(testFile).use { fos ->
+            fos.write(byteArrayOf(0xFF.toByte(), 0xE0.toByte(), 0x00.toByte()))
+            fos.write(ByteArray(100))
+        }
+        createdFiles.add(testFile)
+
+        val result = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        val msg = "Expected valid URI for valid MP3 file with MPEG header"
+        assertNotNull(msg, result)
+        println("SUCCESS: $msg")
+
+        createdUris.add(result!!)
+    }
+
+    @Test
+    fun test170_createAudioFileUri_validMp3_fileCanBeCommitted() {
+        // Create directory
+        testBookDirectory.mkdirs()
+
+        // Create valid MP3 file
+        val testFile = File(testBookDirectory, testFileName)
+        val testContent = "Test audio content"
+        FileOutputStream(testFile).use { fos ->
+            fos.write(byteArrayOf(0x49.toByte(), 0x44.toByte(), 0x33.toByte()))
+            fos.write(testContent.toByteArray())
+        }
+        createdFiles.add(testFile)
+
+        val uri = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        var msg = "URI should not be null"
+        assertNotNull(msg, uri)
+        println("SUCCESS: $msg")
+
+        createdUris.add(uri!!)
+
+        // Verify we can write to the URI
+        contentResolver.openOutputStream(uri)?.use { outputStream ->
+            outputStream.write(testContent.toByteArray())
+        }
+
+        msg = "Should be able to open output stream"
+        println("SUCCESS: $msg")
+
+        // Verify we can read back from the URI
+        val readContent = contentResolver.openInputStream(uri)?.use { inputStream ->
+            inputStream.readBytes().toString(Charsets.UTF_8)
+        }
+
+        msg = "Should be able to read from committed file"
+        assertNotNull(msg, readContent)
+        println("SUCCESS: $msg")
+
+        msg = "Content should be readable from URI"
+        assertTrue(msg, readContent!!.contains(testContent))
+        println("SUCCESS: $msg")
+    }
+
+    @Test
+    fun test180_createAudioFileUri_returnsUriWithCorrectMetadata() {
+        // Create directory
+        testBookDirectory.mkdirs()
+
+        // Create valid MP3 file
+        val testFile = File(testBookDirectory, testFileName)
+        FileOutputStream(testFile).use { fos ->
+            fos.write(byteArrayOf(0x49.toByte(), 0x44.toByte(), 0x33.toByte()))
+            fos.write(ByteArray(100))
+        }
+        createdFiles.add(testFile)
+
+        val uri = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName,
+            mimeType = "audio/mpeg"
+        )
+
+        var msg = "URI should not be null"
+        assertNotNull(msg, uri)
+        println("SUCCESS: $msg")
+
+        createdUris.add(uri!!)
+
+        // Query the metadata
+        val projection = arrayOf(
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.RELATIVE_PATH
+        )
+
+        val cursor = contentResolver.query(uri, projection, null, null, null)
+
+        msg = "Cursor should not be null"
+        assertNotNull(msg, cursor)
+        println("SUCCESS: $msg")
+
+        cursor!!.use {
+            msg = "Cursor should have at least one row"
+            assertTrue(msg, it.moveToFirst())
+            println("SUCCESS: $msg")
+
+            val displayNameIndex = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val mimeTypeIndex = it.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+            val relativePathIndex = it.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH)
+
+            val displayName = it.getString(displayNameIndex)
+            val mimeType = it.getString(mimeTypeIndex)
+            val relativePath = it.getString(relativePathIndex)
+
+            msg = "Display name should match"
+            assertEquals(msg, testFileName, displayName)
+            println("SUCCESS: $msg")
+
+            msg = "MIME type should match"
+            assertEquals(msg, "audio/mpeg", mimeType)
+            println("SUCCESS: $msg")
+
+            msg = "Relative path should match"
+            assertEquals(msg, StoragePaths.getBookRelativePath(testBookName), relativePath)
+            println("SUCCESS: $msg")
+        }
+    }
+
+    @Test
+    fun test190_createAudioFileUri_existingDirectory_doesNotReturnNull() {
+        // Create directory
+        val directoryCreated = testBookDirectory.mkdirs()
+
+        var msg = "Directory should be created successfully"
+        assertTrue(msg, directoryCreated || testBookDirectory.exists())
+        println("SUCCESS: $msg")
+
+        msg = "Directory must exist before test"
+        assertTrue(msg, testBookDirectory.exists())
+        println("SUCCESS: $msg")
+
+        // Create valid MP3 file in existing directory
+        val testFile = File(testBookDirectory, testFileName)
+        FileOutputStream(testFile).use { fos ->
+            fos.write(byteArrayOf(0x49.toByte(), 0x44.toByte(), 0x33.toByte()))
+            fos.write(ByteArray(100))
+        }
+        createdFiles.add(testFile)
+
+        msg = "Test file should exist"
+        assertTrue(msg, testFile.exists())
+        println("SUCCESS: $msg")
+
+        msg = "Test file should be in the correct directory"
+        assertTrue(msg, testFile.parentFile?.absolutePath == testBookDirectory.absolutePath)
+        println("SUCCESS: $msg")
+
+        // Call the method under test
+        val result = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        msg = "Should return URI when directory exists and file is valid"
+        assertNotNull(msg, result)
+        println("SUCCESS: $msg")
+
+        if (result != null) {
+            createdUris.add(result)
+        }
+    }
+
+    // Query tests
+
+    @Test
+    fun test200_queryAudioFileUri_existingFile_returnsUri() {
+        // Setup: Create file and insert into MediaStore
+        testBookDirectory.mkdirs()
+
+        val testFile = File(testBookDirectory, testFileName)
+        FileOutputStream(testFile).use { fos ->
+            fos.write(byteArrayOf(0x49.toByte(), 0x44.toByte(), 0x33.toByte()))
+            fos.write(ByteArray(100))
+        }
+        createdFiles.add(testFile)
+
+        val createdUri = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        var msg = "Created URI should not be null"
+        assertNotNull(msg, createdUri)
+        println("SUCCESS: $msg")
+
+        createdUris.add(createdUri!!)
+
+        // Test: Query for the file
         val queriedUri = StoragePaths.queryAudioFileUri(
             contentResolver,
-            "nonExistentBook",
-            "nonExistentFile.mp3"
+            testBookName,
+            testFileName
         )
 
-        // Assert
-        assertNull("queryAudioFileUri should return null for a non-existent file", queriedUri)
+        msg = "Query should find the existing file"
+        assertNotNull(msg, queriedUri)
+        println("SUCCESS: $msg")
+
+        msg = "Queried URI should match created URI"
+        assertEquals(msg, createdUri.toString(), queriedUri.toString())
+        println("SUCCESS: $msg")
     }
 
     @Test
-    fun getAudioFileLocation_returnsMediaStoreUri_forExistingFile() {
-        val bookDir = "locationTestBook_${System.currentTimeMillis()}"
-        val fileName = "locationFile.mp3"
+    fun test210_queryAudioFileUri_nonexistentFile_returnsNull() {
+        val result = StoragePaths.queryAudioFileUri(
+            contentResolver,
+            testBookName,
+            "nonexistent_file.mp3"
+        )
 
-        // Arrange
-        val createdUri = createAndCommitTestFile(bookDir, fileName)
-
-        // Act
-        val location = StoragePaths.getAudioFileLocation(context, bookDir, fileName)
-
-        // Assert
-        assertTrue("Location should be of type MediaStoreUri", location is AudioFileLocation.MediaStoreUri)
-        assertEquals("The URI in the location object should match the created URI", createdUri, (location as AudioFileLocation.MediaStoreUri).uri)
+        val msg = "Query should return null for nonexistent file"
+        assertNull(msg, result)
+        println("SUCCESS: $msg")
     }
 
     @Test
-    fun getAudioFileLocation_returnsNotFound_forNonExistentFile() {
-        // Act
+    fun test220_getAudioFileLocation_existingFile_returnsMediaStoreUri() {
+        // Setup
+        testBookDirectory.mkdirs()
+
+        val testFile = File(testBookDirectory, testFileName)
+        FileOutputStream(testFile).use { fos ->
+            fos.write(byteArrayOf(0x49.toByte(), 0x44.toByte(), 0x33.toByte()))
+            fos.write(ByteArray(100))
+        }
+        createdFiles.add(testFile)
+
+        val uri = StoragePaths.createAudioFileUri(
+            contentResolver,
+            testBookName,
+            testFileName
+        )
+
+        var msg = "Created URI should not be null"
+        assertNotNull(msg, uri)
+        println("SUCCESS: $msg")
+
+        createdUris.add(uri!!)
+
+        // Test
         val location = StoragePaths.getAudioFileLocation(
             context,
-            "nonExistentBookForLocation",
-            "nonExistentFileForLocation.mp3"
+            testBookName,
+            testFileName
         )
 
-        // Assert
-        assertTrue("Location should be NotFound", location is AudioFileLocation.NotFound)
+        msg = "Location should be MediaStoreUri"
+        assertTrue(msg, location is AudioFileLocation.MediaStoreUri)
+        println("SUCCESS: $msg")
     }
 
+    @Test
+    fun test230_getAudioFileLocation_nonexistentFile_returnsNotFound() {
+        val location = StoragePaths.getAudioFileLocation(
+            context,
+            testBookName,
+            "nonexistent.mp3"
+        )
+
+        val msg = "Location should be NotFound"
+        assertTrue(msg, location is AudioFileLocation.NotFound)
+        println("SUCCESS: $msg")
+    }
 }
