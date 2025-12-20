@@ -3,7 +3,6 @@ package com.dogmaticcentral.bookreader.data.media
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
-import android.os.Environment
 import android.provider.MediaStore
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -35,6 +34,7 @@ import java.io.FileOutputStream
 class StoragePathsInstrumentedTest {
 
     private lateinit var context: Context
+
     private lateinit var contentResolver: ContentResolver
     private lateinit var testBookDirectory: File
     private val testBookName = "TestBook"
@@ -49,19 +49,28 @@ class StoragePathsInstrumentedTest {
         context = ApplicationProvider.getApplicationContext()
         contentResolver = context.contentResolver
 
-        // Create the base test directory structure
-        val externalRoot = Environment.getExternalStorageDirectory()
+        // UPDATED: Use the confirmed safe directory from test030
+        // We add "TestBookData" so we don't mix with other cache files
+        val safeRoot = File(context.externalCacheDir, "TestBookData")
+
+        // Ensure this root exists
+        if (!safeRoot.exists()) safeRoot.mkdirs()
+
         val relativePath = StoragePaths.getBookRelativePath(testBookName)
-        testBookDirectory = File(externalRoot, relativePath)
+        testBookDirectory = File(safeRoot, relativePath)
 
         // Delete existing directory if it exists (cleanup from failed previous tests)
         if (testBookDirectory.exists()) {
             testBookDirectory.deleteRecursively()
+        } else {
+            // Ensure the parent "TestSandbox" directory exists
+            testBookDirectory.parentFile?.mkdirs()
         }
 
         // Clear tracking lists
         createdFiles.clear()
         createdUris.clear()
+
     }
 
     @After
@@ -98,7 +107,124 @@ class StoragePathsInstrumentedTest {
         }
     }
 
-    // Setup validation tests
+    @Test
+    fun test003_verifyExternalCacheDirIsAccessibleAndWritable() {
+        println("=".repeat(80))
+        println("TEST 030: EXTERNAL CACHE DIRECTORY DIAGNOSTICS")
+        println("=".repeat(80))
+
+        // 1. Availability Check
+        // getExternalCacheDir() returns the path to /sdcard/Android/data/<package>/cache
+        // This does not require READ/WRITE_EXTERNAL_STORAGE permissions.
+        val cacheDir = context.externalCacheDir
+
+        val msgNull = "Context.externalCacheDir returned null. External storage might be unmounted or emulated storage is missing."
+        assertNotNull(msgNull, cacheDir)
+
+        // Force non-null for subsequent usage
+        val dir = cacheDir!!
+
+        println("PATH REPORT:")
+        println("  Absolute Path: ${dir.absolutePath}")
+        println("  Canonical Path: ${dir.canonicalPath}")
+        println("  Free Space: ${dir.freeSpace} bytes")
+        println("  Usable Space: ${dir.usableSpace} bytes")
+
+        // 2. Property Validation
+        println("\nPROPERTY CHECKS:")
+
+        var msg = "Cache directory must exist"
+        val exists = dir.exists()
+        val iconExists = if (exists) "✓" else "✗"
+        println("  $iconExists Exists: $exists")
+        assertTrue(msg, exists)
+
+        msg = "Cache path must be a directory"
+        val isDir = dir.isDirectory
+        val iconDir = if (isDir) "✓" else "✗"
+        println("  $iconDir Is Directory: $isDir")
+        assertTrue(msg, isDir)
+
+        msg = "Cache directory must be readable"
+        val canRead = dir.canRead()
+        val iconRead = if (canRead) "✓" else "✗"
+        println("  $iconRead Can Read: $canRead")
+        assertTrue(msg, canRead)
+
+        msg = "Cache directory must be writable"
+        val canWrite = dir.canWrite()
+        val iconWrite = if (canWrite) "✓" else "✗"
+        println("  $iconWrite Can Write: $canWrite")
+        assertTrue(msg, canWrite)
+
+        // 3. Path Logic Check
+        // Ensure we are actually inside the app sandbox and not root storage
+        println("\nSANDBOX VALIDATION:")
+        val packageName = context.packageName
+        println("  Current Package: $packageName")
+
+        msg = "Path should contain package name (confirms we are in app-specific storage)"
+        val isSandboxed = dir.absolutePath.contains(packageName)
+        val iconSandbox = if (isSandboxed) "✓" else "✗"
+        println("  $iconSandbox Path contains package name: $isSandboxed")
+        assertTrue(msg, isSandboxed)
+
+        // 4. Exhaustive I/O Test (CRUD)
+        println("\nI/O CAPABILITY TEST (CRUD):")
+
+        val probeFileName = "test030_probe_${System.currentTimeMillis()}.tmp"
+        val probeFile = File(dir, probeFileName)
+        val testContent = "StoragePaths Diagnostics: " + java.util.UUID.randomUUID().toString()
+
+        try {
+            // A. Create
+            println("  [1/4] Attempting creation of ${probeFile.name}...")
+            val created = probeFile.createNewFile()
+            println("        Result: $created")
+
+            msg = "File creation failed or file already exists"
+            assertTrue(msg, created || probeFile.exists())
+            createdFiles.add(probeFile) // Add to global cleanup just in case
+
+            // B. Write
+            println("  [2/4] Attempting write (${testContent.length} bytes)...")
+            probeFile.writeText(testContent)
+            println("        Result: Success (No exception thrown)")
+
+            msg = "File length should be > 0 after write"
+            assertTrue(msg, probeFile.length() > 0)
+
+            // C. Read
+            println("  [3/4] Attempting read verification...")
+            val readContent = probeFile.readText()
+            println("        Read: '$readContent'")
+
+            msg = "Read content must match written content"
+            assertEquals(msg, testContent, readContent)
+
+            // D. Delete
+            println("  [4/4] Attempting deletion...")
+            val deleted = probeFile.delete()
+            println("        Result: $deleted")
+
+            msg = "File should be deleted successfully"
+            assertTrue(msg, deleted)
+
+            // Remove from global cleanup since we handled it
+            createdFiles.remove(probeFile)
+
+            println("  ✓ I/O Test Complete: The directory is fully functional.")
+
+        } catch (e: Exception) {
+            println("  ✗ I/O Test FAILED with Exception: ${e.javaClass.simpleName}")
+            println("    Message: ${e.message}")
+            e.printStackTrace()
+            throw e
+        }
+
+        println("=".repeat(80))
+    }
+
 
     @Test
     fun test010_directoryCanBeCreated() {
@@ -319,7 +445,7 @@ class StoragePathsInstrumentedTest {
         // Create non-empty file with invalid MP3 header
         val testFile = File(testBookDirectory, testFileName)
         FileOutputStream(testFile).use { fos ->
-            val invalidData = "This is not an MP3 file".toByteArray()
+            val invalidData = "This is just test, not audio data".toByteArray()
             fos.write(invalidData)
         }
         createdFiles.add(testFile)
