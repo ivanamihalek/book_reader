@@ -13,7 +13,7 @@ DB_NAME = 'bookreader.db'
 # Setup global  Peewee database proxy - Peewee is so lame
 # I don't want to instantiate the db here before checking and
 # informing the user that something may be wrong
-global_db_proxy = Proxy()
+from settings import global_db_proxy
 
 
 def parse_directory_name(directory_path: str) -> Tuple[str, str]:
@@ -206,6 +206,7 @@ def main():
 
         # Connect to database and check tables
         print("Connecting to database...")
+
         db = SqliteDatabase(DB_NAME)
         global_db_proxy.initialize(db)
         db.connect()
@@ -242,7 +243,8 @@ def main():
             print(f"Chapters in database: {Chapter.select().count()}")
             for chapter in Chapter.select():
                 print(f" - Chapter: {chapter.title} ({chapter.fileName}) for Book ID: {chapter.book.id}")
-
+    except DatabaseError as e:
+         print(f"Error: {e}")
     except Exception as e:
         print(f"Error: {e}")
 
